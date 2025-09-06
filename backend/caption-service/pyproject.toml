@@ -1,0 +1,42 @@
+[project]
+name = "florence-service"
+version = "0.1.0"
+description = "Florence-2 image captioning service"
+authors = [
+    {name = "Florence Service"}
+]
+requires-python = ">=3.9,<3.12"
+dependencies = [
+    # Core dependencies
+    "pillow>=10.0.0",
+    "numpy>=1.21.0",
+    
+    # IPC communication
+    "pyzmq>=25.0.0",
+    "msgpack>=1.0.0",
+    
+    # Florence-2 specific dependencies (requires specific transformers version)
+    "torch>=2.4.0",
+    "torchvision>=0.19.0",
+    "transformers==4.49.0",  # Florence-2 requires exactly this version
+    "accelerate>=1.10.0",
+    "einops>=0.8.1",
+    "timm>=1.0.19",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+]
+
+[project.scripts]
+florence-service = "service:main"
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"

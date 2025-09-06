@@ -1,0 +1,20 @@
+[package]
+name = "aibox-image"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+
+[dependencies]
+eframe = { version = "0.32.0", features = [
+    "default",
+    "__screenshot", # __screenshot is so we can dump a screenshot using EFRAME_SCREENSHOT_TO
+] }
+egui_extras = { version = "0.32.0", features = ["default", "image"] }
+image = { version = "0.25", features = ["png", "jpeg"] }
+rfd = "0.15"
+
+env_logger = { version = "0.10", default-features = false, features = [
+    "auto-color",
+    "humantime",
+] }

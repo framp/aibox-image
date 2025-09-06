@@ -1,0 +1,42 @@
+[project]
+name = "gemma-service"
+version = "0.1.0"
+description = "Gemma text processing and tag extraction service"
+authors = [
+    {name = "Gemma Service"}
+]
+requires-python = ">=3.9,<3.12"
+dependencies = [
+    # Core dependencies
+    "numpy>=1.21.0",
+    "pillow>=10.0.0",
+    
+    # IPC communication
+    "pyzmq>=25.0.0",
+    "msgpack>=1.0.0",
+    
+    # LLM and Vision models (needs latest transformers for SigLIP2)
+    "torch>=2.4.0",
+    "transformers>=4.53.3",  # Latest for SigLIP2 support
+    "accelerate>=1.10.0",
+    
+    # Text embedding models
+    "sentence-transformers>=2.7.0",  # For Qwen3-Embedding-0.6B
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+]
+
+[project.scripts]
+gemma-service = "service:main"
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
