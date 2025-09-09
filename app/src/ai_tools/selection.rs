@@ -10,6 +10,8 @@ use super::zmq;
 pub struct SelectionTool {
     input: String,
     canvas: SharedCanvas,
+
+    loading: bool,
     tx: Sender<Vec<DynamicImage>>,
     rx: Receiver<Vec<DynamicImage>>,
 }
@@ -21,12 +23,15 @@ impl SelectionTool {
         Self {
             input: String::new(),
             canvas,
+            loading: false,
             tx,
             rx,
         }
     }
 
-    fn fetch(&self) {
+    fn fetch(&mut self) {
+        self.loading = true;
+
         let image_path = {
             let canvas_ref = self.canvas.borrow();
             canvas_ref
@@ -65,6 +70,15 @@ impl SelectionTool {
 
 impl super::Tool for SelectionTool {
     fn show(&mut self, ui: &mut Ui) {
+        if self.canvas.borrow().image_path.is_none() {
+            ui.disable();
+        }
+
+        if self.loading {
+            ui.disable();
+            ui.spinner();
+        }
+
         ui.label("Selection Tool");
 
         ui.add(TextEdit::singleline(&mut self.input));
@@ -82,6 +96,7 @@ impl super::Tool for SelectionTool {
         }
 
         if let Ok(selections) = self.rx.try_recv() {
+            self.loading = false;
             self.canvas
                 .borrow_mut()
                 .set_selections(selections, ui.ctx());
