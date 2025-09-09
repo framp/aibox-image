@@ -3,23 +3,24 @@
 
 use eframe::egui;
 
+mod ai_tools;
 mod image_canvas;
 mod tools;
 
-use image_canvas::ImageCanvas;
-use tools::ToolsPanel;
+use ai_tools::ToolsPanel;
+use image_canvas::SharedCanvas;
 
 fn main() -> eframe::Result {
     env_logger::init();
-    
-    let options = eframe::NativeOptions {
+
+    let options: eframe::NativeOptions = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1200.0, 800.0])
             .with_min_inner_size([800.0, 600.0])
             .with_drag_and_drop(true),
         ..Default::default()
     };
-    
+
     eframe::run_native(
         "AI Image Editor",
         options,
@@ -31,16 +32,19 @@ fn main() -> eframe::Result {
 }
 
 struct ImageEditorApp {
-    image_canvas: ImageCanvas,
+    image_canvas: SharedCanvas,
     tools_panel: ToolsPanel,
     error_message: Option<String>,
 }
 
 impl Default for ImageEditorApp {
     fn default() -> Self {
+        let canvas = SharedCanvas::default();
+        let tools_panel = ToolsPanel::new(canvas.clone());
+
         Self {
-            image_canvas: ImageCanvas::default(),
-            tools_panel: ToolsPanel::new(),
+            image_canvas: canvas,
+            tools_panel: tools_panel,
             error_message: None,
         }
     }
@@ -48,7 +52,11 @@ impl Default for ImageEditorApp {
 
 impl ImageEditorApp {
     fn load_image(&mut self, file_path: std::path::PathBuf, ctx: &egui::Context) {
-        match self.image_canvas.load_image(file_path.clone(), ctx) {
+        match self
+            .image_canvas
+            .borrow_mut()
+            .load_image(file_path.clone(), ctx)
+        {
             Ok(()) => {
                 self.error_message = None;
                 println!("Successfully loaded: {:?}", file_path);
@@ -61,7 +69,10 @@ impl ImageEditorApp {
 
     fn open_file_dialog(&mut self, ctx: &egui::Context) {
         if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Image Files", &["png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff", "tif"])
+            .add_filter(
+                "Image Files",
+                &["png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff", "tif"],
+            )
             .pick_file()
         {
             self.load_image(path, ctx);
@@ -69,7 +80,7 @@ impl ImageEditorApp {
     }
 
     fn save_image(&mut self) {
-        if let Some(current_path) = &self.image_canvas.image_path {
+        if let Some(current_path) = &self.image_canvas.borrow().image_path {
             match self.save_to_path(current_path.clone()) {
                 Ok(()) => {
                     self.error_message = None;
@@ -95,7 +106,7 @@ impl ImageEditorApp {
             match self.save_to_path(path.clone()) {
                 Ok(()) => {
                     self.error_message = None;
-                    self.image_canvas.image_path = Some(path.clone());
+                    self.image_canvas.borrow_mut().image_path = Some(path.clone());
                     println!("Saved as: {:?}", path);
                 }
                 Err(e) => {
@@ -106,8 +117,8 @@ impl ImageEditorApp {
     }
 
     fn save_to_path(&self, path: std::path::PathBuf) -> Result<(), String> {
-        if let Some(_texture) = &self.image_canvas.texture {
-            if let Some(original_path) = &self.image_canvas.image_path {
+        if let Some(_texture) = &self.image_canvas.borrow().texture {
+            if let Some(original_path) = &self.image_canvas.borrow().image_path {
                 std::fs::copy(original_path, &path)
                     .map_err(|e| format!("Failed to save file: {}", e))?;
                 Ok(())
@@ -131,58 +142,65 @@ impl eframe::App for ImageEditorApp {
                     .stroke(egui::Stroke::NONE)
                     .inner_margin(egui::Margin::ZERO);
 
-                let (_response, dropped_payload) = ui.dnd_drop_zone::<std::path::PathBuf, _>(drop_frame, |ui| {
-                    ui.set_min_size(ctx.screen_rect().size());
-                    egui::TopBottomPanel::top("menu_bar").show_inside(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.menu_button("File", |ui| {
-                                if ui.button("Open Image...").clicked() {
-                                    self.open_file_dialog(ctx);
-                                    ui.close();
-                                }
-                                if ui.button("Load Test Image").clicked() {
-                                    self.load_image(std::path::PathBuf::from("ferris.png"), ctx);
-                                    ui.close();
-                                }
-                                ui.separator();
-                                if ui.button("Save").clicked() {
-                                    self.save_image();
-                                    ui.close();
-                                }
-                                if ui.button("Save As...").clicked() {
-                                    self.save_as_image();
-                                    ui.close();
-                                }
-                                ui.separator();
-                                if ui.button("Exit").clicked() {
-                                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                                }
+                let (_response, dropped_payload) =
+                    ui.dnd_drop_zone::<std::path::PathBuf, _>(drop_frame, |ui| {
+                        ui.set_min_size(ctx.screen_rect().size());
+                        egui::TopBottomPanel::top("menu_bar").show_inside(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.menu_button("File", |ui| {
+                                    if ui.button("Open Image...").clicked() {
+                                        self.open_file_dialog(ctx);
+                                        ui.close();
+                                    }
+                                    if ui.button("Load Test Image").clicked() {
+                                        self.load_image(
+                                            std::path::PathBuf::from("ferris.png"),
+                                            ctx,
+                                        );
+                                        ui.close();
+                                    }
+                                    ui.separator();
+                                    if ui.button("Save").clicked() {
+                                        self.save_image();
+                                        ui.close();
+                                    }
+                                    if ui.button("Save As...").clicked() {
+                                        self.save_as_image();
+                                        ui.close();
+                                    }
+                                    ui.separator();
+                                    if ui.button("Exit").clicked() {
+                                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                                    }
+                                });
                             });
                         });
-                    });
-                    egui::SidePanel::right("tools_panel")
-                        .default_width(300.0)
-                        .min_width(250.0)
-                        .max_width(400.0)
-                        .show_inside(ui, |ui| {
-                            egui::ScrollArea::vertical().show(ui, |ui| {
-                                self.tools_panel.show(ui, self.image_canvas.has_image());
+                        egui::SidePanel::right("tools_panel")
+                            .default_width(300.0)
+                            .min_width(250.0)
+                            .max_width(400.0)
+                            .show_inside(ui, |ui| {
+                                egui::ScrollArea::vertical().show(ui, |ui| {
+                                    let has_image = self.image_canvas.borrow().has_image();
+                                    self.tools_panel.show(ui, has_image);
+                                });
                             });
+                        egui::CentralPanel::default().show_inside(ui, |ui| {
+                            if let Some(ref error) = self.error_message {
+                                ui.colored_label(egui::Color32::RED, format!("Error: {}", error));
+                                ui.separator();
+                            }
+                            self.image_canvas.borrow_mut().show(ui);
                         });
-                    egui::CentralPanel::default().show_inside(ui, |ui| {
-                        if let Some(ref error) = self.error_message {
-                            ui.colored_label(egui::Color32::RED, format!("Error: {}", error));
-                            ui.separator();
-                        }
-                        self.image_canvas.show(ui);
-
                     });
-                });
                 if let Some(dropped_path) = dropped_payload {
                     let path = (*dropped_path).clone();
                     if let Some(extension) = path.extension() {
                         let ext = extension.to_string_lossy().to_lowercase();
-                        if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "tiff" | "tif") {
+                        if matches!(
+                            ext.as_str(),
+                            "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "tiff" | "tif"
+                        ) {
                             self.load_image(path, ctx);
                         } else {
                             self.error_message = Some(format!("Unsupported file format: {}", ext));
