@@ -1,0 +1,50 @@
+[project]
+name = "image-rendering-service"
+version = "0.1.0"
+description = "Stable Diffusion and Flux image rendering service"
+authors = [
+    {name = "Image Rendering Service"}
+]
+requires-python = ">=3.9,<3.12"
+dependencies = [
+    # Core dependencies
+    "pillow>=10.0.0",
+    "numpy>=1.21.0",
+
+    # IPC communication
+    "pyzmq>=25.0.0",
+    "msgpack>=1.0.0",
+
+    # Image generation dependencies
+    "torch>=2.4.0",
+    "torchvision>=0.19.0",
+    "diffusers>=0.30.0",
+    "transformers>=4.49.0",
+    "accelerate>=1.10.0",
+    "safetensors>=0.4.0",
+
+    # Additional dependencies for image processing
+    "xformers>=0.0.27",  # For memory efficient attention (optional)
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+]
+
+[project.scripts]
+image-rendering-service = "service:main"
+image-cli = "cli:main"
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []
+py-modules = ["service", "cli"]
