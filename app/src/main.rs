@@ -5,7 +5,6 @@ use eframe::egui;
 
 mod ai_tools;
 mod image_canvas;
-mod tools;
 
 use ai_tools::ToolsPanel;
 use image_canvas::SharedCanvas;
