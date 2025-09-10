@@ -1,11 +1,13 @@
-use eframe::egui::{ColorImage, ImageButton, TextureHandle, Vec2};
-use image::{DynamicImage, ImageBuffer};
-use std::{cell::RefCell, path::PathBuf, rc::Rc, str::Bytes};
+use eframe::egui::{ColorImage, TextureHandle, Vec2};
+use image::DynamicImage;
+use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
 pub type SharedCanvas = Rc<RefCell<ImageCanvas>>;
 
+#[derive(Clone)]
 pub struct Selection {
     pub texture: TextureHandle,
+    pub image: DynamicImage,
     pub visible: bool,
 }
 
@@ -31,7 +33,6 @@ impl Default for ImageCanvas {
             is_dragging: false,
             drag_start: eframe::egui::Pos2::ZERO,
             selections: Vec::new(),
-            selections_textures: Vec::new(),
         }
     }
 }
@@ -93,7 +94,6 @@ impl ImageCanvas {
     }
 
     pub fn set_selections(&mut self, selections: Vec<DynamicImage>, ctx: &eframe::egui::Context) {
-        self.selections_textures.clear();
         self.selections.clear();
 
         for (idx, dynamic_image) in selections.iter().enumerate() {
@@ -108,6 +108,7 @@ impl ImageCanvas {
 
             self.selections.push(Selection {
                 texture,
+                image: dynamic_image.clone(),
                 visible: true,
             });
         }

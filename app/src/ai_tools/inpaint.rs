@@ -3,7 +3,7 @@ use std::{
     sync::mpsc::{self, Receiver, Sender},
 };
 
-use eframe::egui::{Button, TextEdit, Ui};
+use eframe::egui::{Button, Slider, TextEdit, Ui};
 use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 use serde_bytes::ByteBuf;
 
@@ -45,7 +45,12 @@ impl InpaintTool {
                 .to_string_lossy()
                 .to_string();
 
-            (image_path, canvas_ref.selections.clone())
+            let masks: Vec<DynamicImage> = canvas_ref
+                .selections
+                .iter()
+                .map(|s| s.image.clone())
+                .collect();
+            (image_path, masks)
         };
         let input = self.input.clone();
         let tx = self.tx.clone();
@@ -125,7 +130,7 @@ fn merge_selections(images: &Vec<DynamicImage>) -> DynamicImage {
 }
 
 /// Convert a DynamicImage into a black-and-white mask:
-/// - Non-transparent pixels → white (255,255,255,255)  
+/// - Non-transparent pixels → white (255,255,255,255)
 /// - Transparent pixels → black (0,0,0,255)
 fn to_bw_mask(image: &DynamicImage) -> DynamicImage {
     let (width, height) = image.dimensions();
