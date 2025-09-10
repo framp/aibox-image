@@ -2,11 +2,20 @@ use std::error::Error;
 
 use rmp_serde::Serializer;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde_bytes::ByteBuf;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Request {
-    ImageSelection { prompt: String, image_path: String },
+    ImageSelection {
+        prompt: String,
+        image_path: String,
+    },
+    Inpaint {
+        prompt: String,
+        image_path: String,
+        mask: ByteBuf,
+    },
     HealthCheck,
     Shutdown,
 }
@@ -34,7 +43,13 @@ pub enum Response<T> {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub struct ImageSelectionPayload {
-    pub masks: Vec<serde_bytes::ByteBuf>,
+    pub masks: Vec<ByteBuf>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct InpaintPayload {
+    pub image: ByteBuf,
 }
 
 pub fn request_response<T>(endpoint: &str, request: Request) -> Result<Response<T>, Box<dyn Error>>
@@ -46,7 +61,7 @@ where
 
     socket.set_connect_timeout(1000)?;
     socket.set_sndtimeo(1000)?;
-    socket.set_rcvtimeo(30000)?;
+    // socket.set_rcvtimeo(30000)?;
 
     socket.connect(endpoint)?;
 

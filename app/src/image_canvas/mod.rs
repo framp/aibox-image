@@ -1,11 +1,13 @@
-use eframe::egui::{ColorImage, ImageButton, TextureHandle, Vec2};
-use image::{DynamicImage, ImageBuffer};
-use std::{cell::RefCell, path::PathBuf, rc::Rc, str::Bytes};
+use eframe::egui::{ColorImage, TextureHandle, Vec2};
+use image::DynamicImage;
+use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
 pub type SharedCanvas = Rc<RefCell<ImageCanvas>>;
 
+#[derive(Clone)]
 pub struct Selection {
     pub texture: TextureHandle,
+    pub image: DynamicImage,
     pub visible: bool,
 }
 
@@ -48,33 +50,42 @@ impl ImageCanvas {
         }
     }
 
+    pub fn set_image(
+        &mut self,
+        image: DynamicImage,
+        path: Option<PathBuf>,
+        ctx: &eframe::egui::Context,
+    ) {
+        let rgba_image = image.to_rgba8();
+        let (width, height) = rgba_image.dimensions();
+
+        let color_image =
+            ColorImage::from_rgba_unmultiplied([width as usize, height as usize], &rgba_image);
+
+        let texture = ctx.load_texture(
+            format!(
+                "image_{}",
+                path.as_ref()
+                    .map(|p| p.file_name().unwrap_or_default().to_string_lossy())
+                    .unwrap_or("memory".into())
+            ),
+            color_image,
+            Default::default(),
+        );
+
+        self.image_path = path;
+        self.image_size = Vec2::new(width as f32, height as f32);
+        self.texture = Some(texture);
+        self.zoom = 1.0;
+        self.offset = Vec2::ZERO;
+    }
+
     pub fn load_image(&mut self, path: PathBuf, ctx: &eframe::egui::Context) -> Result<(), String> {
         let image_result = image::open(&path);
 
         match image_result {
             Ok(dynamic_image) => {
-                let rgba_image = dynamic_image.to_rgba8();
-                let (width, height) = rgba_image.dimensions();
-
-                let color_image = ColorImage::from_rgba_unmultiplied(
-                    [width as usize, height as usize],
-                    &rgba_image,
-                );
-
-                let texture = ctx.load_texture(
-                    format!(
-                        "image_{}",
-                        path.file_name().unwrap_or_default().to_string_lossy()
-                    ),
-                    color_image,
-                    Default::default(),
-                );
-
-                self.image_path = Some(path);
-                self.image_size = Vec2::new(width as f32, height as f32);
-                self.texture = Some(texture);
-                self.zoom = 1.0;
-                self.offset = Vec2::ZERO;
+                self.set_image(dynamic_image, Some(path), ctx);
 
                 Ok(())
             }
@@ -97,6 +108,7 @@ impl ImageCanvas {
 
             self.selections.push(Selection {
                 texture,
+                image: dynamic_image.clone(),
                 visible: true,
             });
         }

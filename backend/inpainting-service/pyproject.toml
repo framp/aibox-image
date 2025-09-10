@@ -1,0 +1,34 @@
+[project]
+name = "inpainting-service"
+version = "0.1.0"
+description = "Inpaint/outpaint service"
+requires-python = ">=3.9,<3.12"
+dependencies = [
+    "pyzmq>=25.0.0",
+    "msgpack>=1.0.0",
+    "zmq>=0.0.0",
+    "torch>=2.8.0",
+    "diffusers>=0.35.1",
+    "pillow>=11.3.0",
+    "opencv-python>=4.11.0.86",
+    "torchvision>=0.23.0",
+    "transformers>=4.56.1",
+    "accelerate>=1.10.1",
+    "protobuf>=6.32.0",
+    "sentencepiece>=0.2.1",
+    "python-dotenv>=1.1.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0.0", "black>=23.0.0"]
+
+[project.scripts]
+service = "service:main"
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"

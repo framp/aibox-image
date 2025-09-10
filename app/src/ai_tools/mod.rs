@@ -2,6 +2,7 @@ use eframe::egui::Ui;
 
 use crate::image_canvas::SharedCanvas;
 
+mod inpaint;
 mod selection;
 mod zmq;
 
@@ -18,7 +19,8 @@ impl ToolsPanel {
     pub fn new(canvas: SharedCanvas) -> Self {
         let mut tools = Vec::new();
 
-        tools.push(Box::new(selection::SelectionTool::new(canvas)) as Box<dyn Tool>);
+        tools.push(Box::new(selection::SelectionTool::new(canvas.clone())) as Box<dyn Tool>);
+        tools.push(Box::new(inpaint::InpaintTool::new(canvas.clone())) as Box<dyn Tool>);
 
         Self { tools }
     }
