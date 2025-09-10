@@ -63,7 +63,7 @@ class Service:
             traceback.print_exc()
             print("Image selection functionality will be disabled")
 
-    def image_selection(self, prompt: str, image_path: str):
+    def image_selection(self, prompt: str, image_path: str, threshold: float = 0.25):
         image_path = Path(image_path)
 
         if not image_path.exists():
@@ -86,7 +86,7 @@ class Service:
         gd_results = self.gd_processor.post_process_grounded_object_detection(
             gd_outputs,
             inputs.input_ids,
-            threshold=GD_THRESHOLD,
+            threshold=threshold,
             text_threshold=GD_TEXT_THRESHOLD,
             target_sizes=[image.size[::-1]],
         )
@@ -165,9 +165,10 @@ class Service:
                 if request.get("action") == "image_selection":
                     prompt = request.get("prompt")
                     image_path = request.get("image_path")
+                    threshold = request.get("threshold", 0.25)
 
                     try:
-                        selections = self.image_selection(prompt, image_path)
+                        selections = self.image_selection(prompt, image_path, threshold)
 
                         response = {"status": "success", "masks": selections}
                         print(f"Extracted {len(selections)} selections from image")

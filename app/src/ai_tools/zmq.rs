@@ -6,7 +6,11 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Request {
-    ImageSelection { prompt: String, image_path: String },
+    ImageSelection {
+        prompt: String,
+        image_path: String,
+        threshold: f32,
+    },
     HealthCheck,
     Shutdown,
 }

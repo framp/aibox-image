@@ -1,6 +1,6 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use eframe::egui::{Button, CollapsingHeader, Image, TextEdit, Ui};
+use eframe::egui::{Button, CollapsingHeader, Image, Slider, TextEdit, Ui};
 use image::DynamicImage;
 
 use crate::image_canvas::SharedCanvas;
@@ -9,6 +9,7 @@ use super::zmq;
 
 pub struct SelectionTool {
     input: String,
+    threshold: f32,
     canvas: SharedCanvas,
 
     loading: bool,
@@ -22,6 +23,7 @@ impl SelectionTool {
 
         Self {
             input: String::new(),
+            threshold: 0.5,
             canvas,
             loading: false,
             tx,
@@ -42,6 +44,7 @@ impl SelectionTool {
                 .to_string()
         };
         let input = self.input.clone();
+        let threshold = self.threshold;
         let tx = self.tx.clone();
 
         std::thread::spawn(move || {
@@ -50,6 +53,7 @@ impl SelectionTool {
                 zmq::Request::ImageSelection {
                     prompt: input,
                     image_path: image_path,
+                    threshold,
                 },
             )
             .unwrap();
@@ -82,6 +86,11 @@ impl super::Tool for SelectionTool {
         ui.label("Selection Tool");
 
         ui.add(TextEdit::singleline(&mut self.input));
+
+        ui.horizontal(|ui| {
+            ui.label("Threshold:");
+            ui.add(Slider::new(&mut self.threshold, 0.0..=1.0).step_by(0.01));
+        });
 
         let submit = ui.add(Button::new("Submit"));
         if submit.clicked() {
