@@ -4,6 +4,11 @@ use std::{cell::RefCell, path::PathBuf, rc::Rc, str::Bytes};
 
 pub type SharedCanvas = Rc<RefCell<ImageCanvas>>;
 
+pub struct Selection {
+    pub texture: TextureHandle,
+    pub visible: bool,
+}
+
 pub struct ImageCanvas {
     pub image_path: Option<PathBuf>,
     pub texture: Option<TextureHandle>,
@@ -12,7 +17,7 @@ pub struct ImageCanvas {
     pub offset: Vec2,
     pub is_dragging: bool,
     pub drag_start: eframe::egui::Pos2,
-    pub selections: Vec<TextureHandle>,
+    pub selections: Vec<Selection>,
 }
 
 impl Default for ImageCanvas {
@@ -90,7 +95,10 @@ impl ImageCanvas {
             let texture =
                 ctx.load_texture(format!("image_{}", idx,), color_image, Default::default());
 
-            self.selections.push(texture);
+            self.selections.push(Selection {
+                texture,
+                visible: true,
+            });
         }
     }
 
@@ -137,16 +145,18 @@ impl ImageCanvas {
                 eframe::egui::Color32::WHITE,
             );
 
-            for texture in &self.selections {
-                ui.painter().image(
-                    texture.id(),
-                    image_rect,
-                    eframe::egui::Rect::from_min_max(
-                        eframe::egui::pos2(0.0, 0.0),
-                        eframe::egui::pos2(1.0, 1.0),
-                    ),
-                    eframe::egui::Color32::WHITE,
-                );
+            for selection in &self.selections {
+                if selection.visible {
+                    ui.painter().image(
+                        selection.texture.id(),
+                        image_rect,
+                        eframe::egui::Rect::from_min_max(
+                            eframe::egui::pos2(0.0, 0.0),
+                            eframe::egui::pos2(1.0, 1.0),
+                        ),
+                        eframe::egui::Color32::WHITE,
+                    );
+                }
             }
 
             ui.painter().text(

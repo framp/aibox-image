@@ -1,6 +1,6 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use eframe::egui::{Button, CollapsingHeader, Image, TextEdit, Ui};
+use eframe::egui::{Button, Checkbox, CollapsingHeader, Image, TextEdit, Ui};
 use image::DynamicImage;
 
 use crate::image_canvas::SharedCanvas;
@@ -106,21 +106,32 @@ impl super::Tool for SelectionTool {
             .default_open(true)
             .show(ui, |ui| {
                 let mut to_remove: Option<usize> = None;
+                let mut visibility_updates: Vec<(usize, bool)> = Vec::new();
 
-                for (i, tex) in self.canvas.borrow().selections.iter().enumerate() {
+                for (i, sel) in self.canvas.borrow().selections.iter().enumerate() {
                     ui.horizontal(|ui| {
                         // Show the texture as a small thumbnail
-                        let size = tex.size_vec2();
+                        let size = sel.texture.size_vec2();
                         let max_side = 128.0;
                         let scale = (max_side / size.x.max(size.y)).min(1.0);
                         let thumb_size = size * scale;
 
-                        ui.add(Image::new(tex).fit_to_exact_size(thumb_size));
+                        let mut visible = sel.visible;
+                        let response = ui.add(Checkbox::without_text(&mut visible));
+                        if response.changed() {
+                            visibility_updates.push((i, visible));
+                        }
+
+                        ui.add(Image::new(&sel.texture).fit_to_exact_size(thumb_size));
 
                         if ui.button("Remove").clicked() {
                             to_remove = Some(i);
                         }
                     });
+                }
+
+                for (i, visible) in visibility_updates {
+                    self.canvas.borrow_mut().selections[i].visible = visible;
                 }
 
                 if let Some(i) = to_remove {
