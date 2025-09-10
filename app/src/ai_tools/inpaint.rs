@@ -4,7 +4,7 @@ use std::{
 };
 
 use eframe::egui::{Button, TextEdit, Ui};
-use image::{DynamicImage, GenericImageView, ImageBuffer, Rgba, RgbaImage};
+use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 use serde_bytes::ByteBuf;
 
 use crate::{ai_tools::zmq::InpaintPayload, image_canvas::SharedCanvas};
@@ -96,7 +96,7 @@ impl super::Tool for InpaintTool {
 
         if let Ok(image) = self.rx.try_recv() {
             self.loading = false;
-            self.canvas.borrow_mut().set_image(image, None, ui.ctx())
+            self.canvas.borrow_mut().set_image(image, None, ui.ctx());
         }
     }
 }

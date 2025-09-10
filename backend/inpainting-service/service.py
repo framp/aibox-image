@@ -4,6 +4,8 @@ import os
 import signal
 import sys
 import time
+from enum import Enum
+from typing import Literal
 
 import msgpack
 import torch
@@ -20,8 +22,8 @@ DEVICE = (
     if torch.cuda.is_available()
     else "cpu"
 )
-# MODEL = "black-forest-labs/FLUX.1-Fill-dev"
-MODEL = "stabilityai/stable-diffusion-2-inpainting"
+FLUX_MODEL = "black-forest-labs/FLUX.1-Fill-dev"
+SD_MODEL = "stabilityai/stable-diffusion-2-inpainting"
 IMG_WIDTH = 512
 IMG_HEIGHT = 512
 
@@ -29,8 +31,13 @@ load_dotenv()
 login(token=os.environ["HF_TOKEN"])
 
 
+class Model(str, Enum):
+    flux = "flux"
+    stable_diffusion = "stable-diffusion"
+
+
 class Service:
-    def __init__(self, port: int = 5557):
+    def __init__(self, model: Model, port: int = 5557):
         self.port = port
         self.context = zmq.Context()
         self.socket = None
@@ -38,23 +45,23 @@ class Service:
 
         self.supported_formats = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
 
-        self._init_models()
+        self._init_models(model)
 
-    def _init_models(self):
+    def _init_models(self, model: Model):
         try:
-            print(f"Loading {MODEL} on {DEVICE}...")
-            # self.model = FluxFillPipeline.from_pretrained(
-            #     MODEL, torch_dtype=torch.bfloat16
-            # ).to(DEVICE)
-            self.model = StableDiffusionInpaintPipeline.from_pretrained(
-                "runwayml/stable-diffusion-inpainting", torch_dtype=torch.float16
-            ).to(DEVICE)
-
-            print("Optimizing model...")
-            # self.model.vae.enable_slicing()
-            # self.model.vae.enable_tiling()
-
-            # self.model.to(torch.float16)
+            if model == Model.flux:
+                print(f"Loading {FLUX_MODEL} on {DEVICE}...")
+                self.model_name = FLUX_MODEL
+                self.model = FluxFillPipeline.from_pretrained(
+                    FLUX_MODEL, torch_dtype=torch.bfloat16
+                ).to(DEVICE)
+            elif model == Model.stable_diffusion:
+                print(f"Loading {SD_MODEL} on {DEVICE}...")
+                self.model_name = SD_MODEL
+                self.model = StableDiffusionInpaintPipeline.from_pretrained(
+                    SD_MODEL,
+                    torch_dtype=torch.float16,
+                ).to(DEVICE)
 
             print("Model loaded successfully")
         except Exception as e:
@@ -69,20 +76,19 @@ class Service:
         mask = Image.open(io.BytesIO(mask)).convert("RGB")
 
         image = image.resize((IMG_WIDTH, IMG_HEIGHT))
-        mask = mask.resize((IMG_WIDTH, IMG_HEIGHT))
+        mask = mask.resize((IMG_WIDTH, IMG_HEIGHT)).convert("L")
 
-        with torch.inference_mode():
-            result = self.model(
-                prompt=prompt,
-                image=image,
-                mask_image=mask,
-                width=IMG_WIDTH,
-                height=IMG_HEIGHT,
-                num_inference_steps=15,
-                generator=torch.Generator(DEVICE).manual_seed(0),
-            ).images[0]
-
-        result.save("result.png", "PNG")
+        result = self.model(
+            prompt=prompt,
+            image=image,
+            mask_image=mask,
+            width=IMG_WIDTH,
+            height=IMG_HEIGHT,
+            num_inference_steps=50,
+            guidance_scale=30,
+            max_sequence_length=512,
+            generator=torch.Generator(DEVICE).manual_seed(0),
+        ).images[0]
 
         byte_array = io.BytesIO()
         result.save(byte_array, format="PNG")
@@ -127,7 +133,7 @@ class Service:
                     response = {
                         "status": "healthy",
                         "service": "llm",
-                        "model": MODEL,
+                        "model": self.model_name,
                         "device": device,
                         "timestamp": time.time(),
                     }
@@ -186,13 +192,19 @@ def main():
         help="Port to bind the service (default: 5559)",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument(
+        "--model",
+        type=Model,
+        default=Model.flux,
+        help="Inpainting model",
+    )
 
     args = parser.parse_args()
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    service = Service(port=args.port)
+    service = Service(model=args.model, port=args.port)
 
     try:
         service.start()
