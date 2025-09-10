@@ -12,7 +12,8 @@ pub struct ImageCanvas {
     pub offset: Vec2,
     pub is_dragging: bool,
     pub drag_start: eframe::egui::Pos2,
-    pub selections: Vec<TextureHandle>,
+    pub selections: Vec<DynamicImage>,
+    pub selections_textures: Vec<TextureHandle>,
 }
 
 impl Default for ImageCanvas {
@@ -26,6 +27,7 @@ impl Default for ImageCanvas {
             is_dragging: false,
             drag_start: eframe::egui::Pos2::ZERO,
             selections: Vec::new(),
+            selections_textures: Vec::new(),
         }
     }
 }
@@ -43,33 +45,42 @@ impl ImageCanvas {
         }
     }
 
+    pub fn set_image(
+        &mut self,
+        image: DynamicImage,
+        path: Option<PathBuf>,
+        ctx: &eframe::egui::Context,
+    ) {
+        let rgba_image = image.to_rgba8();
+        let (width, height) = rgba_image.dimensions();
+
+        let color_image =
+            ColorImage::from_rgba_unmultiplied([width as usize, height as usize], &rgba_image);
+
+        let texture = ctx.load_texture(
+            format!(
+                "image_{}",
+                path.as_ref()
+                    .map(|p| p.file_name().unwrap_or_default().to_string_lossy())
+                    .unwrap_or("memory".into())
+            ),
+            color_image,
+            Default::default(),
+        );
+
+        self.image_path = path;
+        self.image_size = Vec2::new(width as f32, height as f32);
+        self.texture = Some(texture);
+        self.zoom = 1.0;
+        self.offset = Vec2::ZERO;
+    }
+
     pub fn load_image(&mut self, path: PathBuf, ctx: &eframe::egui::Context) -> Result<(), String> {
         let image_result = image::open(&path);
 
         match image_result {
             Ok(dynamic_image) => {
-                let rgba_image = dynamic_image.to_rgba8();
-                let (width, height) = rgba_image.dimensions();
-
-                let color_image = ColorImage::from_rgba_unmultiplied(
-                    [width as usize, height as usize],
-                    &rgba_image,
-                );
-
-                let texture = ctx.load_texture(
-                    format!(
-                        "image_{}",
-                        path.file_name().unwrap_or_default().to_string_lossy()
-                    ),
-                    color_image,
-                    Default::default(),
-                );
-
-                self.image_path = Some(path);
-                self.image_size = Vec2::new(width as f32, height as f32);
-                self.texture = Some(texture);
-                self.zoom = 1.0;
-                self.offset = Vec2::ZERO;
+                self.set_image(dynamic_image, Some(path), ctx);
 
                 Ok(())
             }
@@ -78,6 +89,7 @@ impl ImageCanvas {
     }
 
     pub fn set_selections(&mut self, selections: Vec<DynamicImage>, ctx: &eframe::egui::Context) {
+        self.selections_textures.clear();
         self.selections.clear();
 
         for (idx, dynamic_image) in selections.iter().enumerate() {
@@ -90,7 +102,8 @@ impl ImageCanvas {
             let texture =
                 ctx.load_texture(format!("image_{}", idx,), color_image, Default::default());
 
-            self.selections.push(texture);
+            self.selections_textures.push(texture);
+            self.selections.push(dynamic_image.clone());
         }
     }
 
@@ -137,7 +150,7 @@ impl ImageCanvas {
                 eframe::egui::Color32::WHITE,
             );
 
-            for texture in &self.selections {
+            for texture in &self.selections_textures {
                 ui.painter().image(
                     texture.id(),
                     image_rect,
