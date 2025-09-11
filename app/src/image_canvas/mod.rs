@@ -2,7 +2,14 @@ use eframe::egui::{ColorImage, ImageButton, TextureHandle, Vec2};
 use image::{DynamicImage, ImageBuffer};
 use std::{cell::RefCell, path::PathBuf, rc::Rc, str::Bytes};
 
-pub type SharedCanvas = Rc<RefCell<ImageCanvas>>;
+// No longer need SharedCanvas type - we'll pass &mut ImageCanvas directly
+
+#[derive(Clone)]
+pub struct Selection {
+    pub texture: TextureHandle,
+    pub image: DynamicImage,
+    pub visible: bool,
+}
 
 pub struct ImageCanvas {
     pub image_path: Option<PathBuf>,
@@ -12,7 +19,7 @@ pub struct ImageCanvas {
     pub offset: Vec2,
     pub is_dragging: bool,
     pub drag_start: eframe::egui::Pos2,
-    pub selections: Vec<TextureHandle>,
+    pub selections: Vec<Selection>,
 }
 
 impl Default for ImageCanvas {
@@ -43,33 +50,42 @@ impl ImageCanvas {
         }
     }
 
+    pub fn set_image(
+        &mut self,
+        image: DynamicImage,
+        path: Option<PathBuf>,
+        ctx: &eframe::egui::Context,
+    ) {
+        let rgba_image = image.to_rgba8();
+        let (width, height) = rgba_image.dimensions();
+
+        let color_image =
+            ColorImage::from_rgba_unmultiplied([width as usize, height as usize], &rgba_image);
+
+        let texture = ctx.load_texture(
+            format!(
+                "image_{}",
+                path.as_ref()
+                    .map(|p| p.file_name().unwrap_or_default().to_string_lossy())
+                    .unwrap_or("memory".into())
+            ),
+            color_image,
+            Default::default(),
+        );
+
+        self.image_path = path;
+        self.image_size = Vec2::new(width as f32, height as f32);
+        self.texture = Some(texture);
+        self.zoom = 1.0;
+        self.offset = Vec2::ZERO;
+    }
+
     pub fn load_image(&mut self, path: PathBuf, ctx: &eframe::egui::Context) -> Result<(), String> {
         let image_result = image::open(&path);
 
         match image_result {
             Ok(dynamic_image) => {
-                let rgba_image = dynamic_image.to_rgba8();
-                let (width, height) = rgba_image.dimensions();
-
-                let color_image = ColorImage::from_rgba_unmultiplied(
-                    [width as usize, height as usize],
-                    &rgba_image,
-                );
-
-                let texture = ctx.load_texture(
-                    format!(
-                        "image_{}",
-                        path.file_name().unwrap_or_default().to_string_lossy()
-                    ),
-                    color_image,
-                    Default::default(),
-                );
-
-                self.image_path = Some(path);
-                self.image_size = Vec2::new(width as f32, height as f32);
-                self.texture = Some(texture);
-                self.zoom = 1.0;
-                self.offset = Vec2::ZERO;
+                self.set_image(dynamic_image, Some(path), ctx);
 
                 Ok(())
             }
@@ -90,7 +106,11 @@ impl ImageCanvas {
             let texture =
                 ctx.load_texture(format!("image_{}", idx,), color_image, Default::default());
 
-            self.selections.push(texture);
+            self.selections.push(Selection {
+                texture,
+                image: dynamic_image.clone(),
+                visible: true,
+            });
         }
     }
 
@@ -137,16 +157,18 @@ impl ImageCanvas {
                 eframe::egui::Color32::WHITE,
             );
 
-            for texture in &self.selections {
-                ui.painter().image(
-                    texture.id(),
-                    image_rect,
-                    eframe::egui::Rect::from_min_max(
-                        eframe::egui::pos2(0.0, 0.0),
-                        eframe::egui::pos2(1.0, 1.0),
-                    ),
-                    eframe::egui::Color32::WHITE,
-                );
+            for selection in &self.selections {
+                if selection.visible {
+                    ui.painter().image(
+                        selection.texture.id(),
+                        image_rect,
+                        eframe::egui::Rect::from_min_max(
+                            eframe::egui::pos2(0.0, 0.0),
+                            eframe::egui::pos2(1.0, 1.0),
+                        ),
+                        eframe::egui::Color32::WHITE,
+                    );
+                }
             }
 
             ui.painter().text(
