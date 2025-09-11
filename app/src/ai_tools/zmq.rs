@@ -10,6 +10,7 @@ pub enum Request {
     ImageSelection {
         prompt: String,
         image_path: String,
+        threshold: f32,
     },
     Inpaint {
         prompt: String,
