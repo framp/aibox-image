@@ -1,14 +1,36 @@
 use eframe::egui::{ColorImage, ImageButton, TextureHandle, Vec2};
 use image::{DynamicImage, ImageBuffer};
-use std::{cell::RefCell, path::PathBuf, rc::Rc, str::Bytes};
 
+use std::{cell::RefCell, path::PathBuf, rc::Rc, str::Bytes};
 // No longer need SharedCanvas type - we'll pass &mut ImageCanvas directly
 
 #[derive(Clone)]
 pub struct Selection {
+    pub texture_id: String,
     pub texture: TextureHandle,
     pub image: DynamicImage,
     pub visible: bool,
+}
+
+impl Selection {
+    pub fn new(ctx: &eframe::egui::Context, image: DynamicImage, texture_id: &str) -> Self {
+        let rgba_image = image.to_rgba8();
+        let (width, height) = rgba_image.dimensions();
+
+        let color_image =
+            ColorImage::from_rgba_unmultiplied([width as usize, height as usize], &rgba_image);
+
+        let texture_id = format!("selection_{}", texture_id);
+
+        let texture = ctx.load_texture(&texture_id, color_image, Default::default());
+
+        Self {
+            texture_id,
+            texture,
+            image,
+            visible: true,
+        }
+    }
 }
 
 pub struct ImageCanvas {
@@ -97,20 +119,11 @@ impl ImageCanvas {
         self.selections.clear();
 
         for (idx, dynamic_image) in selections.iter().enumerate() {
-            let rgba_image = dynamic_image.to_rgba8();
-            let (width, height) = rgba_image.dimensions();
-
-            let color_image =
-                ColorImage::from_rgba_unmultiplied([width as usize, height as usize], &rgba_image);
-
-            let texture =
-                ctx.load_texture(format!("image_{}", idx,), color_image, Default::default());
-
-            self.selections.push(Selection {
-                texture,
-                image: dynamic_image.clone(),
-                visible: true,
-            });
+            self.selections.push(Selection::new(
+                ctx,
+                dynamic_image.clone(),
+                &format!("{}", idx),
+            ));
         }
     }
 

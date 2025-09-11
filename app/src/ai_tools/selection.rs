@@ -1,9 +1,9 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use eframe::egui::{Button, Checkbox, CollapsingHeader, Image, Slider, TextEdit, Ui};
-use image::DynamicImage;
+use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 
-use crate::image_canvas::ImageCanvas;
+use crate::image_canvas::{ImageCanvas, Selection};
 
 use super::zmq;
 
@@ -105,6 +105,7 @@ impl super::Tool for SelectionTool {
             .default_open(true)
             .show(ui, |ui| {
                 let mut to_remove: Option<usize> = None;
+                let mut to_invert: Option<usize> = None;
                 let mut visibility_updates: Vec<(usize, bool)> = Vec::new();
 
                 for (i, sel) in canvas.selections.iter().enumerate() {
@@ -123,6 +124,10 @@ impl super::Tool for SelectionTool {
 
                         ui.add(Image::new(&sel.texture).fit_to_exact_size(thumb_size));
 
+                        if ui.button("Invert").clicked() {
+                            to_invert = Some(i);
+                        }
+
                         if ui.button("Remove").clicked() {
                             to_remove = Some(i);
                         }
@@ -133,9 +138,35 @@ impl super::Tool for SelectionTool {
                     canvas.selections[i].visible = visible;
                 }
 
+                if let Some(i) = to_invert {
+                    let old = &canvas.selections[i];
+                    canvas.selections[i] =
+                        Selection::new(ui.ctx(), invert_selection(&old.image), &old.texture_id);
+                }
+
                 if let Some(i) = to_remove {
                     canvas.selections.remove(i);
                 }
             });
     }
+}
+
+fn invert_selection(image: &DynamicImage) -> DynamicImage {
+    let black_pixel = Rgba::<u8>([0, 0, 0, 255]);
+    let transparent_pixel = Rgba::<u8>([0, 0, 0, 0]);
+
+    let (width, height) = image.dimensions();
+    let mut new_img = RgbaImage::new(width, height);
+
+    for (x, y, p) in image.pixels() {
+        let alpha = p[3];
+        let new_pixel = if alpha == 0 {
+            black_pixel
+        } else {
+            transparent_pixel
+        };
+        new_img.put_pixel(x, y, new_pixel);
+    }
+
+    DynamicImage::ImageRgba8(new_img)
 }
