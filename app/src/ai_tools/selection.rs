@@ -140,8 +140,12 @@ impl super::Tool for SelectionTool {
 
                 if let Some(i) = to_invert {
                     let old = &canvas.selections[i];
-                    canvas.selections[i] =
-                        Selection::new(ui.ctx(), invert_selection(&old.image), &old.texture_id);
+                    canvas.selections[i] = Selection::new(
+                        ui.ctx(),
+                        invert_selection(&old.image),
+                        &old.texture_id,
+                        old.alpha,
+                    );
                 }
 
                 if let Some(i) = to_remove {

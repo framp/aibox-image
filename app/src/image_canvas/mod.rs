@@ -10,10 +10,16 @@ pub struct Selection {
     pub texture: TextureHandle,
     pub image: DynamicImage,
     pub visible: bool,
+    pub alpha: u8,
 }
 
 impl Selection {
-    pub fn new(ctx: &eframe::egui::Context, image: DynamicImage, texture_id: &str) -> Self {
+    pub fn new(
+        ctx: &eframe::egui::Context,
+        image: DynamicImage,
+        texture_id: &str,
+        alpha: u8,
+    ) -> Self {
         let rgba_image = image.to_rgba8();
         let (width, height) = rgba_image.dimensions();
 
@@ -28,6 +34,7 @@ impl Selection {
             texture_id,
             texture,
             image,
+            alpha,
             visible: true,
         }
     }
@@ -123,6 +130,7 @@ impl ImageCanvas {
                 ctx,
                 dynamic_image.clone(),
                 &format!("{}", idx),
+                180,
             ));
         }
     }
@@ -179,7 +187,7 @@ impl ImageCanvas {
                             eframe::egui::pos2(0.0, 0.0),
                             eframe::egui::pos2(1.0, 1.0),
                         ),
-                        eframe::egui::Color32::WHITE,
+                        eframe::egui::Color32::from_white_alpha(selection.alpha),
                     );
                 }
             }
