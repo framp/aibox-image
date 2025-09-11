@@ -11,6 +11,10 @@ pub enum Request {
         prompt: String,
         image_path: String,
         threshold: f32,
+    },
+    Inpaint {
+        prompt: String,
+        image_path: String,
         mask: ByteBuf,
     },
     HealthCheck,
