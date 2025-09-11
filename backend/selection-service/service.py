@@ -126,19 +126,11 @@ class Service:
         for i in range(masks.shape[1]):
             mask = masks[0, i].numpy()  # 2D mask
 
-            # Create RGBA image
-            rgba = np.zeros((mask.shape[0], mask.shape[1], 4), dtype=np.uint8)
-
-            # Purple color for the object
-            rgba[..., 0] = 128  # R
-            rgba[..., 1] = 0  # G
-            rgba[..., 2] = 128  # B
-
-            # Alpha channel = mask * 255
-            rgba[..., 3] = (mask * 255).astype(np.uint8)
+            # Convert to alpha mask
+            mask = (mask * 255).astype(np.uint8)
 
             # Encode as PNG
-            is_success, buffer = cv2.imencode(".png", rgba)
+            is_success, buffer = cv2.imencode(".png", mask)
             if not is_success:
                 raise RuntimeError(f"Failed to encode mask {i}")
 

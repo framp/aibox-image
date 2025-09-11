@@ -1,14 +1,63 @@
-use eframe::egui::{ColorImage, ImageButton, TextureHandle, Vec2};
-use image::{DynamicImage, ImageBuffer};
-use std::{cell::RefCell, path::PathBuf, rc::Rc, str::Bytes};
+use eframe::egui::{Color32, ColorImage, TextureHandle, Vec2};
+use image::{DynamicImage, GrayImage};
 
+use std::path::PathBuf;
 // No longer need SharedCanvas type - we'll pass &mut ImageCanvas directly
 
 #[derive(Clone)]
 pub struct Selection {
-    pub texture: TextureHandle,
-    pub image: DynamicImage,
+    pub mask_texture: TextureHandle,
+    pub overlay_texture: TextureHandle,
+    pub mask: GrayImage,
     pub visible: bool,
+}
+
+impl Selection {
+    pub fn from_mask(ctx: &eframe::egui::Context, mask: GrayImage) -> Self {
+        let (width, height) = mask.dimensions();
+
+        // Convert grayscale to ColorImage, using the grayscale as alpha
+        // So that we can apply color to it
+        let pixels = mask
+            .pixels()
+            .flat_map(|p| {
+                let mask_alpha = p[0];
+                Color32::from_white_alpha(mask_alpha).to_array()
+            })
+            .collect::<Vec<_>>();
+
+        let overlay_texture = ctx.load_texture(
+            "",
+            ColorImage::from_rgba_unmultiplied([width as usize, height as usize], &pixels),
+            Default::default(),
+        );
+        let mask_texture = ctx.load_texture(
+            "",
+            ColorImage::from_gray([width as usize, height as usize], mask.as_raw()),
+            Default::default(),
+        );
+
+        Self {
+            mask_texture,
+            overlay_texture,
+            mask,
+            visible: true,
+        }
+    }
+
+    pub fn overlay(&self, ui: &mut eframe::egui::Ui, rect: eframe::egui::Rect) {
+        if self.visible {
+            ui.painter().image(
+                self.overlay_texture.id(),
+                rect,
+                eframe::egui::Rect::from_min_max(
+                    eframe::egui::pos2(0.0, 0.0),
+                    eframe::egui::pos2(1.0, 1.0),
+                ),
+                eframe::egui::Color32::from_rgba_unmultiplied(128, 0, 128, 128),
+            );
+        }
+    }
 }
 
 pub struct ImageCanvas {
@@ -93,27 +142,6 @@ impl ImageCanvas {
         }
     }
 
-    pub fn set_selections(&mut self, selections: Vec<DynamicImage>, ctx: &eframe::egui::Context) {
-        self.selections.clear();
-
-        for (idx, dynamic_image) in selections.iter().enumerate() {
-            let rgba_image = dynamic_image.to_rgba8();
-            let (width, height) = rgba_image.dimensions();
-
-            let color_image =
-                ColorImage::from_rgba_unmultiplied([width as usize, height as usize], &rgba_image);
-
-            let texture =
-                ctx.load_texture(format!("image_{}", idx,), color_image, Default::default());
-
-            self.selections.push(Selection {
-                texture,
-                image: dynamic_image.clone(),
-                visible: true,
-            });
-        }
-    }
-
     pub fn show(&mut self, ui: &mut eframe::egui::Ui) {
         if let Some(texture) = &self.texture {
             let available_size = ui.available_size();
@@ -158,17 +186,7 @@ impl ImageCanvas {
             );
 
             for selection in &self.selections {
-                if selection.visible {
-                    ui.painter().image(
-                        selection.texture.id(),
-                        image_rect,
-                        eframe::egui::Rect::from_min_max(
-                            eframe::egui::pos2(0.0, 0.0),
-                            eframe::egui::pos2(1.0, 1.0),
-                        ),
-                        eframe::egui::Color32::WHITE,
-                    );
-                }
+                selection.overlay(ui, image_rect);
             }
 
             ui.painter().text(

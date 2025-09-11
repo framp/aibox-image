@@ -1,9 +1,9 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use eframe::egui::{Button, Checkbox, CollapsingHeader, Image, Slider, TextEdit, Ui};
-use image::DynamicImage;
+use image::{DynamicImage, GrayImage, Luma};
 
-use crate::image_canvas::ImageCanvas;
+use crate::image_canvas::{ImageCanvas, Selection};
 
 use super::zmq;
 
@@ -11,8 +11,8 @@ pub struct SelectionTool {
     input: String,
     threshold: f32,
     loading: bool,
-    tx: Sender<Vec<DynamicImage>>,
-    rx: Receiver<Vec<DynamicImage>>,
+    tx: Sender<Vec<GrayImage>>,
+    rx: Receiver<Vec<GrayImage>>,
 }
 
 impl SelectionTool {
@@ -54,10 +54,14 @@ impl SelectionTool {
 
             if let zmq::Response::Success(payload) = response {
                 if let zmq::ImageSelectionPayload { masks } = payload {
-                    let selections: Vec<DynamicImage> = masks
+                    let selections = masks
                         .into_iter()
-                        .filter_map(|mask_bytes| image::load_from_memory(&mask_bytes).ok())
-                        .collect();
+                        .filter_map(|mask_bytes| {
+                            image::load_from_memory(&mask_bytes)
+                                .ok()
+                                .map(|img: DynamicImage| img.into_luma8())
+                        })
+                        .collect::<Vec<_>>();
 
                     let _ = tx.send(selections);
                 }
@@ -93,24 +97,37 @@ impl super::Tool for SelectionTool {
 
         let clear = ui.add(Button::new("Clear"));
         if clear.clicked() {
-            canvas.set_selections(Vec::new(), ui.ctx());
+            canvas.selections = Vec::new();
+        }
+
+        let select_all = ui.add(Button::new("Select canvas"));
+        if select_all.clicked() {
+            let size = canvas.image_size;
+            canvas.selections.push(Selection::from_mask(
+                ui.ctx(),
+                GrayImage::from_pixel(size.x as u32, size.y as u32, Luma([255])),
+            ));
         }
 
         if let Ok(selections) = self.rx.try_recv() {
             self.loading = false;
-            canvas.set_selections(selections, ui.ctx());
+            canvas.selections = selections
+                .into_iter()
+                .map(|img| Selection::from_mask(ui.ctx(), img))
+                .collect();
         }
 
         CollapsingHeader::new("Selections")
             .default_open(true)
             .show(ui, |ui| {
                 let mut to_remove: Option<usize> = None;
+                let mut to_invert: Option<usize> = None;
                 let mut visibility_updates: Vec<(usize, bool)> = Vec::new();
 
                 for (i, sel) in canvas.selections.iter().enumerate() {
                     ui.horizontal(|ui| {
                         // Show the texture as a small thumbnail
-                        let size = sel.texture.size_vec2();
+                        let size = sel.overlay_texture.size_vec2();
                         let max_side = 128.0;
                         let scale = (max_side / size.x.max(size.y)).min(1.0);
                         let thumb_size = size * scale;
@@ -121,7 +138,11 @@ impl super::Tool for SelectionTool {
                             visibility_updates.push((i, visible));
                         }
 
-                        ui.add(Image::new(&sel.texture).fit_to_exact_size(thumb_size));
+                        ui.add(Image::new(&sel.mask_texture).fit_to_exact_size(thumb_size));
+
+                        if ui.button("Invert").clicked() {
+                            to_invert = Some(i);
+                        }
 
                         if ui.button("Remove").clicked() {
                             to_remove = Some(i);
@@ -133,9 +154,30 @@ impl super::Tool for SelectionTool {
                     canvas.selections[i].visible = visible;
                 }
 
+                if let Some(i) = to_invert {
+                    let old = &canvas.selections[i];
+                    canvas.selections[i] = Selection::from_mask(ui.ctx(), invert_mask(&old.mask));
+                }
+
                 if let Some(i) = to_remove {
                     canvas.selections.remove(i);
                 }
             });
     }
+}
+
+fn invert_mask(image: &GrayImage) -> GrayImage {
+    let black_pixel = Luma([0]);
+    let white_pixel = Luma([255]);
+
+    let (width, height) = image.dimensions();
+    let mut new_img = GrayImage::new(width, height);
+
+    for (x, y, p) in image.enumerate_pixels() {
+        let alpha = p[0];
+        let new_pixel = if alpha == 0 { white_pixel } else { black_pixel };
+        new_img.put_pixel(x, y, new_pixel);
+    }
+
+    new_img
 }

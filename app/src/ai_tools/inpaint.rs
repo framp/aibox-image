@@ -3,8 +3,8 @@ use std::{
     sync::mpsc::{self, Receiver, Sender},
 };
 
-use eframe::egui::{Button, Slider, TextEdit, Ui};
-use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
+use eframe::egui::{Button, TextEdit, Ui};
+use image::{DynamicImage, GrayImage, Luma};
 use serde_bytes::ByteBuf;
 
 use crate::{ai_tools::zmq::InpaintPayload, image_canvas::ImageCanvas};
@@ -41,13 +41,12 @@ impl InpaintTool {
             .to_string_lossy()
             .to_string();
 
-        let masks: Vec<DynamicImage> = canvas.selections.iter().map(|s| s.image.clone()).collect();
+        let masks = canvas.selections.iter().map(|s| s.mask.clone()).collect();
         let input = self.input.clone();
         let tx = self.tx.clone();
 
         std::thread::spawn(move || {
-            let mask = merge_selections(&masks);
-            let mask = to_bw_mask(&mask);
+            let mask = merge_masks(&masks);
             let mut buf = Vec::new();
             mask.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::Png)
                 .unwrap();
@@ -96,46 +95,24 @@ impl super::Tool for InpaintTool {
     }
 }
 
-fn merge_selections(images: &Vec<DynamicImage>) -> DynamicImage {
+fn merge_masks(images: &Vec<GrayImage>) -> GrayImage {
     if images.is_empty() {
-        return DynamicImage::new_rgba8(1, 1);
+        return GrayImage::new(1, 1);
     }
 
     let width = images.iter().map(|img| img.width()).max().unwrap();
     let height = images.iter().map(|img| img.height()).max().unwrap();
 
-    let mut canvas: RgbaImage = RgbaImage::from_pixel(width, height, Rgba([0, 0, 0, 0]));
+    let mut canvas: GrayImage = GrayImage::from_pixel(width, height, Luma([0]));
 
     for img in images {
-        let rgba_img = img.to_rgba8();
-        for (x, y, pixel) in rgba_img.enumerate_pixels() {
-            if pixel[3] != 0 {
-                // only write if source pixel is non-transparent
+        for (x, y, pixel) in img.enumerate_pixels() {
+            if pixel[0] != 0 {
+                // only write if source pixel is not black
                 canvas.put_pixel(x, y, *pixel);
             }
         }
     }
 
-    DynamicImage::ImageRgba8(canvas)
-}
-
-/// Convert a DynamicImage into a black-and-white mask:
-/// - Non-transparent pixels → white (255,255,255,255)
-/// - Transparent pixels → black (0,0,0,255)
-fn to_bw_mask(image: &DynamicImage) -> DynamicImage {
-    let (width, height) = image.dimensions();
-    let rgba = image.to_rgba8(); // ensure RGBA8
-    let mut new_img: RgbaImage = RgbaImage::new(width, height);
-
-    for (x, y, pixel) in rgba.enumerate_pixels() {
-        let alpha = pixel[3];
-        let new_pixel = if alpha != 0 {
-            Rgba([255, 255, 255, 255])
-        } else {
-            Rgba([0, 0, 0, 255])
-        };
-        new_img.put_pixel(x, y, new_pixel);
-    }
-
-    DynamicImage::ImageRgba8(new_img)
+    canvas
 }
