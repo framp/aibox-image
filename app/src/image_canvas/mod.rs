@@ -1,8 +1,8 @@
-use eframe::egui::{ColorImage, TextureHandle, Vec2};
-use image::DynamicImage;
-use std::{cell::RefCell, path::PathBuf, rc::Rc};
+use eframe::egui::{ColorImage, ImageButton, TextureHandle, Vec2};
+use image::{DynamicImage, ImageBuffer};
+use std::{cell::RefCell, path::PathBuf, rc::Rc, str::Bytes};
 
-pub type SharedCanvas = Rc<RefCell<ImageCanvas>>;
+// No longer need SharedCanvas type - we'll pass &mut ImageCanvas directly
 
 #[derive(Clone)]
 pub struct Selection {

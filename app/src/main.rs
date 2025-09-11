@@ -7,7 +7,7 @@ mod ai_tools;
 mod image_canvas;
 
 use ai_tools::ToolsPanel;
-use image_canvas::SharedCanvas;
+use image_canvas::ImageCanvas;
 
 fn main() -> eframe::Result {
     env_logger::init();
@@ -31,19 +31,19 @@ fn main() -> eframe::Result {
 }
 
 struct ImageEditorApp {
-    image_canvas: SharedCanvas,
+    image_canvas: ImageCanvas,
     tools_panel: ToolsPanel,
     error_message: Option<String>,
 }
 
 impl Default for ImageEditorApp {
     fn default() -> Self {
-        let canvas = SharedCanvas::default();
-        let tools_panel = ToolsPanel::new(canvas.clone());
+        let canvas = ImageCanvas::default();
+        let tools_panel = ToolsPanel::new();
 
         Self {
             image_canvas: canvas,
-            tools_panel: tools_panel,
+            tools_panel,
             error_message: None,
         }
     }
@@ -51,11 +51,7 @@ impl Default for ImageEditorApp {
 
 impl ImageEditorApp {
     fn load_image(&mut self, file_path: std::path::PathBuf, ctx: &egui::Context) {
-        match self
-            .image_canvas
-            .borrow_mut()
-            .load_image(file_path.clone(), ctx)
-        {
+        match self.image_canvas.load_image(file_path.clone(), ctx) {
             Ok(()) => {
                 self.error_message = None;
                 println!("Successfully loaded: {:?}", file_path);
@@ -79,7 +75,7 @@ impl ImageEditorApp {
     }
 
     fn save_image(&mut self) {
-        if let Some(current_path) = &self.image_canvas.borrow().image_path {
+        if let Some(current_path) = &self.image_canvas.image_path {
             match self.save_to_path(current_path.clone()) {
                 Ok(()) => {
                     self.error_message = None;
@@ -105,7 +101,7 @@ impl ImageEditorApp {
             match self.save_to_path(path.clone()) {
                 Ok(()) => {
                     self.error_message = None;
-                    self.image_canvas.borrow_mut().image_path = Some(path.clone());
+                    self.image_canvas.image_path = Some(path.clone());
                     println!("Saved as: {:?}", path);
                 }
                 Err(e) => {
@@ -116,8 +112,8 @@ impl ImageEditorApp {
     }
 
     fn save_to_path(&self, path: std::path::PathBuf) -> Result<(), String> {
-        if let Some(_texture) = &self.image_canvas.borrow().texture {
-            if let Some(original_path) = &self.image_canvas.borrow().image_path {
+        if let Some(_texture) = &self.image_canvas.texture {
+            if let Some(original_path) = &self.image_canvas.image_path {
                 std::fs::copy(original_path, &path)
                     .map_err(|e| format!("Failed to save file: {}", e))?;
                 Ok(())
@@ -180,8 +176,8 @@ impl eframe::App for ImageEditorApp {
                             .max_width(400.0)
                             .show_inside(ui, |ui| {
                                 egui::ScrollArea::vertical().show(ui, |ui| {
-                                    let has_image = self.image_canvas.borrow().has_image();
-                                    self.tools_panel.show(ui, has_image);
+                                    let has_image = self.image_canvas.has_image();
+                                    self.tools_panel.show(ui, &mut self.image_canvas, has_image);
                                 });
                             });
                         egui::CentralPanel::default().show_inside(ui, |ui| {
@@ -189,7 +185,7 @@ impl eframe::App for ImageEditorApp {
                                 ui.colored_label(egui::Color32::RED, format!("Error: {}", error));
                                 ui.separator();
                             }
-                            self.image_canvas.borrow_mut().show(ui);
+                            self.image_canvas.show(ui);
                         });
                     });
                 if let Some(dropped_path) = dropped_payload {
