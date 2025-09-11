@@ -100,6 +100,15 @@ impl super::Tool for SelectionTool {
             canvas.selections = Vec::new();
         }
 
+        let select_all = ui.add(Button::new("Select canvas"));
+        if select_all.clicked() {
+            let size = canvas.image_size;
+            canvas.selections.push(Selection::from_mask(
+                ui.ctx(),
+                GrayImage::from_pixel(size.x as u32, size.y as u32, Luma([255])),
+            ));
+        }
+
         if let Ok(selections) = self.rx.try_recv() {
             self.loading = false;
             canvas.selections = selections
