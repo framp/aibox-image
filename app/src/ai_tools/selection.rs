@@ -3,13 +3,13 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use eframe::egui::{Button, Checkbox, CollapsingHeader, Image, TextEdit, Ui};
 use image::DynamicImage;
 
-use crate::image_canvas::SharedCanvas;
+use crate::image_canvas::ImageCanvas;
 
 use super::zmq;
 
 pub struct SelectionTool {
     input: String,
-    canvas: SharedCanvas,
+    threshold: f32,
 
     loading: bool,
     tx: Sender<Vec<DynamicImage>>,
@@ -17,30 +17,27 @@ pub struct SelectionTool {
 }
 
 impl SelectionTool {
-    pub fn new(canvas: SharedCanvas) -> Self {
+    pub fn new() -> Self {
         let (tx, rx) = mpsc::channel();
 
         Self {
             input: String::new(),
-            canvas,
+            threshold: 0.5,
             loading: false,
             tx,
             rx,
         }
     }
 
-    fn fetch(&mut self) {
+    fn fetch(&mut self, canvas: &ImageCanvas) {
         self.loading = true;
 
-        let image_path = {
-            let canvas_ref = self.canvas.borrow();
-            canvas_ref
-                .image_path
-                .as_ref()
-                .unwrap()
-                .to_string_lossy()
-                .to_string()
-        };
+        let image_path = canvas
+            .image_path
+            .as_ref()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
         let input = self.input.clone();
         let tx = self.tx.clone();
 
@@ -69,8 +66,8 @@ impl SelectionTool {
 }
 
 impl super::Tool for SelectionTool {
-    fn show(&mut self, ui: &mut Ui) {
-        if self.canvas.borrow().image_path.is_none() {
+    fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
+        if canvas.image_path.is_none() {
             ui.disable();
         }
 
@@ -85,21 +82,17 @@ impl super::Tool for SelectionTool {
 
         let submit = ui.add(Button::new("Submit"));
         if submit.clicked() {
-            self.fetch();
+            self.fetch(canvas);
         }
 
         let clear = ui.add(Button::new("Clear"));
         if clear.clicked() {
-            self.canvas
-                .borrow_mut()
-                .set_selections(Vec::new(), ui.ctx());
+            canvas.set_selections(Vec::new(), ui.ctx());
         }
 
         if let Ok(selections) = self.rx.try_recv() {
             self.loading = false;
-            self.canvas
-                .borrow_mut()
-                .set_selections(selections, ui.ctx());
+            canvas.set_selections(selections, ui.ctx());
         }
 
         CollapsingHeader::new("Selections")
@@ -108,7 +101,7 @@ impl super::Tool for SelectionTool {
                 let mut to_remove: Option<usize> = None;
                 let mut visibility_updates: Vec<(usize, bool)> = Vec::new();
 
-                for (i, sel) in self.canvas.borrow().selections.iter().enumerate() {
+                for (i, sel) in canvas.selections.iter().enumerate() {
                     ui.horizontal(|ui| {
                         // Show the texture as a small thumbnail
                         let size = sel.texture.size_vec2();
@@ -131,11 +124,11 @@ impl super::Tool for SelectionTool {
                 }
 
                 for (i, visible) in visibility_updates {
-                    self.canvas.borrow_mut().selections[i].visible = visible;
+                    canvas.selections[i].visible = visible;
                 }
 
                 if let Some(i) = to_remove {
-                    self.canvas.borrow_mut().selections.remove(i);
+                    canvas.selections.remove(i);
                 }
             });
     }

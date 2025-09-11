@@ -7,13 +7,12 @@ use eframe::egui::{Button, Slider, TextEdit, Ui};
 use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 use serde_bytes::ByteBuf;
 
-use crate::{ai_tools::zmq::InpaintPayload, image_canvas::SharedCanvas};
+use crate::{ai_tools::zmq::InpaintPayload, image_canvas::ImageCanvas};
 
 use super::zmq;
 
 pub struct InpaintTool {
     input: String,
-    canvas: SharedCanvas,
 
     loading: bool,
     tx: Sender<DynamicImage>,
@@ -21,37 +20,28 @@ pub struct InpaintTool {
 }
 
 impl InpaintTool {
-    pub fn new(canvas: SharedCanvas) -> Self {
+    pub fn new() -> Self {
         let (tx, rx) = mpsc::channel();
 
         Self {
             input: String::new(),
-            canvas,
             loading: false,
             tx,
             rx,
         }
     }
 
-    fn fetch(&mut self) {
+    fn fetch(&mut self, canvas: &ImageCanvas) {
         self.loading = true;
 
-        let (image_path, masks) = {
-            let canvas_ref = self.canvas.borrow();
-            let image_path = canvas_ref
-                .image_path
-                .as_ref()
-                .unwrap()
-                .to_string_lossy()
-                .to_string();
+        let image_path = canvas
+            .image_path
+            .as_ref()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
 
-            let masks: Vec<DynamicImage> = canvas_ref
-                .selections
-                .iter()
-                .map(|s| s.image.clone())
-                .collect();
-            (image_path, masks)
-        };
+        let masks: Vec<DynamicImage> = canvas.selections.iter().map(|s| s.image.clone()).collect();
         let input = self.input.clone();
         let tx = self.tx.clone();
 
@@ -80,8 +70,8 @@ impl InpaintTool {
 }
 
 impl super::Tool for InpaintTool {
-    fn show(&mut self, ui: &mut Ui) {
-        if self.canvas.borrow().image_path.is_none() || self.canvas.borrow().selections.is_empty() {
+    fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
+        if canvas.image_path.is_none() || canvas.selections.is_empty() {
             ui.disable();
         }
 
@@ -96,12 +86,12 @@ impl super::Tool for InpaintTool {
 
         let submit = ui.add(Button::new("Submit"));
         if submit.clicked() {
-            self.fetch();
+            self.fetch(canvas);
         }
 
         if let Ok(image) = self.rx.try_recv() {
             self.loading = false;
-            self.canvas.borrow_mut().set_image(image, None, ui.ctx());
+            canvas.set_image(image, None, ui.ctx());
         }
     }
 }
