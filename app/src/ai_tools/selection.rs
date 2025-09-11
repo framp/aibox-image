@@ -9,8 +9,6 @@ use super::zmq;
 
 pub struct SelectionTool {
     input: String,
-    threshold: f32,
-
     loading: bool,
     tx: Sender<Vec<DynamicImage>>,
     rx: Receiver<Vec<DynamicImage>>,
@@ -22,7 +20,6 @@ impl SelectionTool {
 
         Self {
             input: String::new(),
-            threshold: 0.5,
             loading: false,
             tx,
             rx,
