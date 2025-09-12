@@ -71,8 +71,8 @@ class Service:
             traceback.print_exc()
             print("Image inpainting functionality will be disabled")
 
-    def inpaint(self, prompt: str, image_path: str, mask: bytes):
-        image = Image.open(image_path).convert("RGB")
+    def inpaint(self, prompt: str, image: bytes, mask: bytes):
+        image = Image.open(io.BytesIO(image)).convert("RGB")
         mask = Image.open(io.BytesIO(mask)).convert("RGB")
 
         image = image.resize((IMG_WIDTH, IMG_HEIGHT))
@@ -113,10 +113,10 @@ class Service:
                 if request.get("action") == "inpaint":
                     prompt = request.get("prompt")
                     mask = request.get("mask")
-                    image_path = request.get("image_path")
+                    image = request.get("image")
 
                     try:
-                        image = self.inpaint(prompt, image_path, mask)
+                        image = self.inpaint(prompt, image, mask)
 
                         response = {"status": "success", "image": image}
                         print(f"Successfully inpainted image")

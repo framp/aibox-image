@@ -34,29 +34,28 @@ impl InpaintTool {
     fn fetch(&mut self, canvas: &ImageCanvas) {
         self.loading = true;
 
-        let image_path = canvas
-            .image_path
-            .as_ref()
-            .unwrap()
-            .to_string_lossy()
-            .to_string();
-
+        let image = canvas.image.clone();
         let masks = canvas.selections.iter().map(|s| s.mask.clone()).collect();
-        let input = self.input.clone();
+        let prompt = self.input.clone();
         let tx = self.tx.clone();
 
         std::thread::spawn(move || {
+            let mut image_buf = Vec::new();
+            image
+                .write_to(&mut Cursor::new(&mut image_buf), image::ImageFormat::Png)
+                .unwrap();
+
             let mask = merge_masks(&masks);
-            let mut buf = Vec::new();
-            mask.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::Png)
+            let mut mask_buf = Vec::new();
+            mask.write_to(&mut Cursor::new(&mut mask_buf), image::ImageFormat::Png)
                 .unwrap();
 
             let response = zmq::request_response::<InpaintPayload>(
                 "tcp://127.0.0.1:5559",
                 zmq::Request::Inpaint {
-                    prompt: input,
-                    image_path: image_path,
-                    mask: ByteBuf::from(buf),
+                    prompt,
+                    image: ByteBuf::from(image_buf),
+                    mask: ByteBuf::from(mask_buf),
                 },
             )
             .unwrap();
@@ -70,7 +69,7 @@ impl InpaintTool {
 
 impl super::Tool for InpaintTool {
     fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
-        if canvas.image_path.is_none() || canvas.selections.is_empty() {
+        if canvas.selections.is_empty() {
             ui.disable();
         }
 
@@ -90,7 +89,7 @@ impl super::Tool for InpaintTool {
 
         if let Ok(image) = self.rx.try_recv() {
             self.loading = false;
-            canvas.set_image(image, None, ui.ctx());
+            canvas.update_image(image, ui.ctx());
         }
     }
 }
