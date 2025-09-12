@@ -139,7 +139,7 @@ impl eframe::App for ImageEditorApp {
 
                 let (_response, dropped_payload) =
                     ui.dnd_drop_zone::<std::path::PathBuf, _>(drop_frame, |ui| {
-                        ui.set_min_size(ctx.screen_rect().size());
+                        // ui.set_min_size(ctx.screen_rect().size());
                         egui::TopBottomPanel::top("menu_bar").show_inside(ui, |ui| {
                             ui.horizontal(|ui| {
                                 ui.menu_button("File", |ui| {
@@ -173,7 +173,7 @@ impl eframe::App for ImageEditorApp {
                         egui::SidePanel::right("tools_panel")
                             .default_width(300.0)
                             .min_width(250.0)
-                            .max_width(400.0)
+                            // .max_width(400.0)
                             .show_inside(ui, |ui| {
                                 egui::ScrollArea::vertical().show(ui, |ui| {
                                     let has_image = self.image_canvas.has_image();

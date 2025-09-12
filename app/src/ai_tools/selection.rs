@@ -1,7 +1,11 @@
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::{
+    io::Cursor,
+    sync::mpsc::{self, Receiver, Sender},
+};
 
 use eframe::egui::{Button, Checkbox, CollapsingHeader, Image, Slider, TextEdit, Ui};
-use image::{DynamicImage, GrayImage, Luma};
+use image::{DynamicImage, GenericImageView, GrayImage, Luma, Rgba, RgbaImage};
+use serde_bytes::ByteBuf;
 
 use crate::image_canvas::{ImageCanvas, Selection};
 
@@ -31,22 +35,22 @@ impl SelectionTool {
     fn fetch(&mut self, canvas: &ImageCanvas) {
         self.loading = true;
 
-        let image_path = canvas
-            .image_path
-            .as_ref()
-            .unwrap()
-            .to_string_lossy()
-            .to_string();
-        let input = self.input.clone();
+        let image = canvas.image.clone();
+        let prompt = self.input.clone();
         let threshold = self.threshold;
         let tx = self.tx.clone();
 
         std::thread::spawn(move || {
+            let mut image_buf = Vec::new();
+            image
+                .write_to(&mut Cursor::new(&mut image_buf), image::ImageFormat::Png)
+                .unwrap();
+
             let response = zmq::request_response(
                 "tcp://127.0.0.1:5558",
                 zmq::Request::ImageSelection {
-                    prompt: input,
-                    image_path: image_path,
+                    prompt,
+                    image: ByteBuf::from(image_buf),
                     threshold,
                 },
             )
@@ -72,10 +76,6 @@ impl SelectionTool {
 
 impl super::Tool for SelectionTool {
     fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
-        if canvas.image_path.is_none() {
-            ui.disable();
-        }
-
         if self.loading {
             ui.disable();
             ui.spinner();
@@ -122,13 +122,14 @@ impl super::Tool for SelectionTool {
             .show(ui, |ui| {
                 let mut to_remove: Option<usize> = None;
                 let mut to_invert: Option<usize> = None;
+                let mut to_expand: Option<usize> = None;
                 let mut visibility_updates: Vec<(usize, bool)> = Vec::new();
 
-                for (i, sel) in canvas.selections.iter().enumerate() {
-                    ui.horizontal(|ui| {
+                for (i, sel) in canvas.selections.iter_mut().enumerate() {
+                    ui.horizontal_wrapped(|ui| {
                         // Show the texture as a small thumbnail
                         let size = sel.overlay_texture.size_vec2();
-                        let max_side = 128.0;
+                        let max_side = 64.0;
                         let scale = (max_side / size.x.max(size.y)).min(1.0);
                         let thumb_size = size * scale;
 
@@ -140,13 +141,23 @@ impl super::Tool for SelectionTool {
 
                         ui.add(Image::new(&sel.mask_texture).fit_to_exact_size(thumb_size));
 
-                        if ui.button("Invert").clicked() {
-                            to_invert = Some(i);
-                        }
+                        ui.vertical(|ui| {
+                            ui.add(Slider::new(&mut sel.scale, 0.1..=5.0).text("Selection Scale"));
 
-                        if ui.button("Remove").clicked() {
-                            to_remove = Some(i);
-                        }
+                            if sel.scale > 1.0 {
+                                if ui.button("Expand canvas").clicked() {
+                                    to_expand = Some(i);
+                                }
+                            }
+
+                            if ui.button("Invert").clicked() {
+                                to_invert = Some(i);
+                            }
+
+                            if ui.button("Remove").clicked() {
+                                to_remove = Some(i);
+                            }
+                        });
                     });
                 }
 
@@ -157,6 +168,20 @@ impl super::Tool for SelectionTool {
                 if let Some(i) = to_invert {
                     let old = &canvas.selections[i];
                     canvas.selections[i] = Selection::from_mask(ui.ctx(), invert_mask(&old.mask));
+                }
+
+                if let Some(i) = to_expand {
+                    let selection = &mut canvas.selections[i];
+                    let dimensions = selection.mask.dimensions();
+                    let dimensions = (
+                        ((dimensions.0 as f32) * selection.scale) as u32,
+                        ((dimensions.1 as f32) * selection.scale) as u32,
+                    );
+                    let center = (dimensions.0 / 2, dimensions.1 / 2);
+                    let expanded_image = expand(&canvas.image.clone().into(), dimensions, center);
+
+                    selection.scale = 1.0;
+                    canvas.update_image(expanded_image.into(), ui.ctx());
                 }
 
                 if let Some(i) = to_remove {
@@ -180,4 +205,29 @@ fn invert_mask(image: &GrayImage) -> GrayImage {
     }
 
     new_img
+}
+
+pub fn expand(image: &DynamicImage, dimensions: (u32, u32), center: (u32, u32)) -> RgbaImage {
+    let (new_width, new_height) = dimensions;
+    let (center_x, center_y) = center;
+
+    // Create a new empty image filled with transparent pixels
+    let mut new_image = RgbaImage::from_pixel(new_width, new_height, Rgba([0, 0, 0, 0]));
+
+    // Offset to place original image centered at `center`
+    let offset_x = center_x as i32 - (image.width() as i32 / 2);
+    let offset_y = center_y as i32 - (image.height() as i32 / 2);
+
+    for y in 0..image.height() {
+        for x in 0..image.width() {
+            let new_x = x as i32 + offset_x;
+            let new_y = y as i32 + offset_y;
+
+            if new_x >= 0 && new_x < new_width as i32 && new_y >= 0 && new_y < new_height as i32 {
+                new_image.put_pixel(new_x as u32, new_y as u32, image.get_pixel(x, y));
+            }
+        }
+    }
+
+    new_image
 }
