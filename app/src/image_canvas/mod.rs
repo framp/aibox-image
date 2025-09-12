@@ -4,71 +4,7 @@ use image::{DynamicImage, GrayImage, RgbaImage};
 use std::path::PathBuf;
 // No longer need SharedCanvas type - we'll pass &mut ImageCanvas directly
 
-#[derive(Clone)]
-pub struct Selection {
-    pub mask_texture: TextureHandle,
-    pub overlay_texture: TextureHandle,
-    pub mask: GrayImage,
-    pub visible: bool,
-    pub scale: f32,
-}
-
-impl Selection {
-    pub fn from_mask(ctx: &eframe::egui::Context, mask: GrayImage) -> Self {
-        let (width, height) = mask.dimensions();
-
-        // Convert grayscale to ColorImage, using the grayscale as alpha
-        // So that we can apply color to it
-        let pixels = mask
-            .pixels()
-            .flat_map(|p| {
-                let mask_alpha = p[0];
-                Color32::from_white_alpha(mask_alpha).to_array()
-            })
-            .collect::<Vec<_>>();
-
-        let overlay_texture = ctx.load_texture(
-            "",
-            ColorImage::from_rgba_unmultiplied([width as usize, height as usize], &pixels),
-            Default::default(),
-        );
-        let mask_texture = ctx.load_texture(
-            "",
-            ColorImage::from_gray([width as usize, height as usize], mask.as_raw()),
-            Default::default(),
-        );
-
-        Self {
-            mask_texture,
-            overlay_texture,
-            mask,
-            visible: true,
-            scale: 1.0,
-        }
-    }
-
-    pub fn overlay(&self, ui: &mut eframe::egui::Ui, rect: eframe::egui::Rect) {
-        if self.visible {
-            let center = rect.center();
-            let scaled_size = rect.size() * self.scale;
-            let scaled_rect = eframe::egui::Rect::from_center_size(center, scaled_size);
-
-            ui.painter().image(
-                self.overlay_texture.id(),
-                scaled_rect,
-                eframe::egui::Rect::from_min_max(
-                    eframe::egui::pos2(0.0, 0.0),
-                    eframe::egui::pos2(1.0, 1.0),
-                ),
-                eframe::egui::Color32::from_rgba_unmultiplied(128, 0, 128, 128),
-            );
-
-            let stroke = eframe::egui::Stroke::new(2.0, eframe::egui::Color32::WHITE);
-            ui.painter()
-                .rect_stroke(scaled_rect, 0.0, stroke, eframe::egui::StrokeKind::Inside);
-        }
-    }
-}
+pub mod selection;
 
 pub struct ImageCanvas {
     pub image_path: Option<PathBuf>,
@@ -79,7 +15,7 @@ pub struct ImageCanvas {
     pub offset: Vec2,
     pub is_dragging: bool,
     pub drag_start: eframe::egui::Pos2,
-    pub selections: Vec<Selection>,
+    pub selections: Vec<selection::Selection>,
 }
 
 impl Default for ImageCanvas {
@@ -140,6 +76,10 @@ impl ImageCanvas {
         self.texture = Some(texture);
         self.zoom = 1.0;
         self.offset = Vec2::ZERO;
+
+        for selection in &mut self.selections {
+            selection.resize_mask(ctx, width, height);
+        }
     }
 
     pub fn update_image(&mut self, image: DynamicImage, ctx: &eframe::egui::Context) {

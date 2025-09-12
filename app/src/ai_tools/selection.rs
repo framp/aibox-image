@@ -7,7 +7,7 @@ use eframe::egui::{Button, Checkbox, CollapsingHeader, Image, Slider, TextEdit, 
 use image::{DynamicImage, GenericImageView, GrayImage, Luma, Rgba, RgbaImage};
 use serde_bytes::ByteBuf;
 
-use crate::image_canvas::{ImageCanvas, Selection};
+use crate::image_canvas::{ImageCanvas, selection::Selection};
 
 use super::zmq;
 
