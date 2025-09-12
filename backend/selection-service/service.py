@@ -1,5 +1,4 @@
 import argparse
-import io
 import signal
 import sys
 import time
@@ -64,8 +63,16 @@ class Service:
             traceback.print_exc()
             print("Image selection functionality will be disabled")
 
-    def image_selection(self, prompt: str, image: bytes, threshold: float = 0.25):
-        image = Image.open(io.BytesIO(image)).convert("RGB")
+    def image_selection(self, prompt: str, image_path: str, threshold: float = 0.25):
+        image_path = Path(image_path)
+
+        if not image_path.exists():
+            raise FileNotFoundError(f"Image file not found: {image_path}")
+
+        if image_path.suffix.lower() not in self.supported_formats:
+            raise ValueError(f"Unsupported image format: {image_path.suffix}")
+
+        image = Image.open(image_path).convert("RGB")
 
         inputs = self.gd_processor(
             images=image,
@@ -149,11 +156,11 @@ class Service:
 
                 if request.get("action") == "image_selection":
                     prompt = request.get("prompt")
-                    image = request.get("image")
+                    image_path = request.get("image_path")
                     threshold = request.get("threshold", 0.25)
 
                     try:
-                        selections = self.image_selection(prompt, image, threshold)
+                        selections = self.image_selection(prompt, image_path, threshold)
 
                         response = {"status": "success", "masks": selections}
                         print(f"Extracted {len(selections)} selections from image")

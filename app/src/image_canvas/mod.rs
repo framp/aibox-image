@@ -1,5 +1,5 @@
 use eframe::egui::{Color32, ColorImage, TextureHandle, Vec2};
-use image::{DynamicImage, GrayImage, RgbaImage};
+use image::{DynamicImage, GrayImage};
 
 use std::path::PathBuf;
 // No longer need SharedCanvas type - we'll pass &mut ImageCanvas directly
@@ -10,7 +10,6 @@ pub struct Selection {
     pub overlay_texture: TextureHandle,
     pub mask: GrayImage,
     pub visible: bool,
-    pub scale: f32,
 }
 
 impl Selection {
@@ -43,29 +42,20 @@ impl Selection {
             overlay_texture,
             mask,
             visible: true,
-            scale: 1.0,
         }
     }
 
     pub fn overlay(&self, ui: &mut eframe::egui::Ui, rect: eframe::egui::Rect) {
         if self.visible {
-            let center = rect.center();
-            let scaled_size = rect.size() * self.scale;
-            let scaled_rect = eframe::egui::Rect::from_center_size(center, scaled_size);
-
             ui.painter().image(
                 self.overlay_texture.id(),
-                scaled_rect,
+                rect,
                 eframe::egui::Rect::from_min_max(
                     eframe::egui::pos2(0.0, 0.0),
                     eframe::egui::pos2(1.0, 1.0),
                 ),
                 eframe::egui::Color32::from_rgba_unmultiplied(128, 0, 128, 128),
             );
-
-            let stroke = eframe::egui::Stroke::new(2.0, eframe::egui::Color32::WHITE);
-            ui.painter()
-                .rect_stroke(scaled_rect, 0.0, stroke, eframe::egui::StrokeKind::Inside);
         }
     }
 }
@@ -74,7 +64,6 @@ pub struct ImageCanvas {
     pub image_path: Option<PathBuf>,
     pub texture: Option<TextureHandle>,
     pub image_size: Vec2,
-    pub image: RgbaImage,
     pub zoom: f32,
     pub offset: Vec2,
     pub is_dragging: bool,
@@ -85,7 +74,6 @@ pub struct ImageCanvas {
 impl Default for ImageCanvas {
     fn default() -> Self {
         Self {
-            image: RgbaImage::new(0, 0),
             image_path: None,
             texture: None,
             image_size: Vec2::ZERO,
@@ -111,7 +99,7 @@ impl ImageCanvas {
         }
     }
 
-    fn set_image(
+    pub fn set_image(
         &mut self,
         image: DynamicImage,
         path: Option<PathBuf>,
@@ -134,16 +122,11 @@ impl ImageCanvas {
             Default::default(),
         );
 
-        self.image = rgba_image;
         self.image_path = path;
         self.image_size = Vec2::new(width as f32, height as f32);
         self.texture = Some(texture);
         self.zoom = 1.0;
         self.offset = Vec2::ZERO;
-    }
-
-    pub fn update_image(&mut self, image: DynamicImage, ctx: &eframe::egui::Context) {
-        self.set_image(image, self.image_path.clone(), ctx);
     }
 
     pub fn load_image(&mut self, path: PathBuf, ctx: &eframe::egui::Context) -> Result<(), String> {
@@ -201,10 +184,6 @@ impl ImageCanvas {
                 ),
                 eframe::egui::Color32::WHITE,
             );
-
-            let stroke = eframe::egui::Stroke::new(1.0, eframe::egui::Color32::WHITE);
-            ui.painter()
-                .rect_stroke(image_rect, 0.0, stroke, eframe::egui::StrokeKind::Outside);
 
             for selection in &self.selections {
                 selection.overlay(ui, image_rect);
