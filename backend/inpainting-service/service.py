@@ -23,12 +23,15 @@ DEVICE = (
     else "cpu"
 )
 FLUX_MODEL = "black-forest-labs/FLUX.1-Fill-dev"
-SD_MODEL = "stabilityai/stable-diffusion-2-inpainting"
-IMG_WIDTH = 512
-IMG_HEIGHT = 512
+SD_MODEL = "stable-diffusion-v1-5/stable-diffusion-inpainting"
 
 load_dotenv()
 login(token=os.environ["HF_TOKEN"])
+
+
+def get_dimensions_divisible_by_8(width: int, height: int) -> tuple[int, int]:
+    """Round dimensions to closest numbers divisible by 8."""
+    return ((width + 4) // 8) * 8, ((height + 4) // 8) * 8
 
 
 class Model(str, Enum):
@@ -75,20 +78,28 @@ class Service:
         image = Image.open(image_path).convert("RGB")
         mask = Image.open(io.BytesIO(mask)).convert("RGB")
 
-        image = image.resize((IMG_WIDTH, IMG_HEIGHT))
-        mask = mask.resize((IMG_WIDTH, IMG_HEIGHT)).convert("L")
+        original_width, original_height = image.size
+        gen_width, gen_height = get_dimensions_divisible_by_8(original_width, original_height)
+
+        if (gen_width, gen_height) != (original_width, original_height):
+            image = image.resize((gen_width, gen_height))
+            mask = mask.resize((gen_width, gen_height))
+        mask = mask.convert("L")
 
         result = self.model(
             prompt=prompt,
             image=image,
             mask_image=mask,
-            width=IMG_WIDTH,
-            height=IMG_HEIGHT,
+            width=gen_width,
+            height=gen_height,
             num_inference_steps=50,
             guidance_scale=30,
             max_sequence_length=512,
             generator=torch.Generator(DEVICE).manual_seed(0),
         ).images[0]
+
+        if (gen_width, gen_height) != (original_width, original_height):
+            result = result.resize((original_width, original_height))
 
         byte_array = io.BytesIO()
         result.save(byte_array, format="PNG")
@@ -195,7 +206,7 @@ def main():
     parser.add_argument(
         "--model",
         type=Model,
-        default=Model.flux,
+        default=Model.stable_diffusion,
         help="Inpainting model",
     )
 
