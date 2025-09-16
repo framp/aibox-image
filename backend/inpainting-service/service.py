@@ -4,13 +4,12 @@ import os
 import signal
 import sys
 import time
-from enum import Enum
-from typing import Literal
+from typing import Optional
 
 import msgpack
 import torch
 import zmq
-from diffusers import FluxFillPipeline, StableDiffusionInpaintPipeline
+from diffusers import StableDiffusionInpaintPipeline
 from dotenv import load_dotenv
 from huggingface_hub import login
 from PIL import Image
@@ -22,7 +21,6 @@ DEVICE = (
     if torch.cuda.is_available()
     else "cpu"
 )
-FLUX_MODEL = "black-forest-labs/FLUX.1-Fill-dev"
 SD_MODEL = "stable-diffusion-v1-5/stable-diffusion-inpainting"
 
 load_dotenv()
@@ -34,31 +32,38 @@ def get_dimensions_divisible_by_8(width: int, height: int) -> tuple[int, int]:
     return ((width + 4) // 8) * 8, ((height + 4) // 8) * 8
 
 
-class Model(str, Enum):
-    flux = "flux"
-    stable_diffusion = "stable-diffusion"
-
-
 class Service:
-    def __init__(self, model: Model, port: int = 5557):
+    def __init__(self, port: int = 5557, custom_checkpoint: Optional[str] = None):
         self.port = port
         self.context = zmq.Context()
-        self.socket = None
+        self.socket: Optional[zmq.Socket] = None
         self.running = False
+        self.custom_checkpoint = custom_checkpoint
+        self.model: Optional[StableDiffusionInpaintPipeline] = None
+        self.model_name: str = ""
 
         self.supported_formats = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
 
-        self._init_models(model)
+        self._init_models()
 
-    def _init_models(self, model: Model):
+    def _init_models(self) -> None:
         try:
-            if model == Model.flux:
-                print(f"Loading {FLUX_MODEL} on {DEVICE}...")
-                self.model_name = FLUX_MODEL
-                self.model = FluxFillPipeline.from_pretrained(
-                    FLUX_MODEL, torch_dtype=torch.bfloat16
-                ).to(DEVICE)
-            elif model == Model.stable_diffusion:
+            if self.custom_checkpoint:
+                print(f"Loading custom checkpoint: {self.custom_checkpoint} on {DEVICE}...")
+                self.model_name = self.custom_checkpoint
+                # Check if it's a single file (.safetensors or .ckpt)
+                if self.custom_checkpoint.endswith(('.safetensors', '.ckpt')):
+                    self.model = StableDiffusionInpaintPipeline.from_single_file(
+                        self.custom_checkpoint,
+                        torch_dtype=torch.float16,
+                    ).to(DEVICE)
+                else:
+                    # It's a directory or repo ID
+                    self.model = StableDiffusionInpaintPipeline.from_pretrained(
+                        self.custom_checkpoint,
+                        torch_dtype=torch.float16,
+                    ).to(DEVICE)
+            else:
                 print(f"Loading {SD_MODEL} on {DEVICE}...")
                 self.model_name = SD_MODEL
                 self.model = StableDiffusionInpaintPipeline.from_pretrained(
@@ -68,14 +73,17 @@ class Service:
 
             print("Model loaded successfully")
         except Exception as e:
-            print(f"Warning: Could not load LLM model: {e}")
+            print(f"Warning: Could not load model: {e}")
             import traceback
 
             traceback.print_exc()
-            print("Image inpainting functionality will be disabled")
+            self.model = None
 
-    def inpaint(self, prompt: str, image_path: str, mask: bytes):
-        image = Image.open(image_path).convert("RGB")
+    def inpaint(self, prompt: str, image_bytes: bytes, mask: bytes) -> bytes:
+        if self.model is None:
+            raise RuntimeError("Model not loaded")
+
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         mask = Image.open(io.BytesIO(mask)).convert("RGB")
 
         original_width, original_height = image.size
@@ -86,26 +94,31 @@ class Service:
             mask = mask.resize((gen_width, gen_height))
         mask = mask.convert("L")
 
+        # Use Stable Diffusion inpainting parameters
         result = self.model(
             prompt=prompt,
             image=image,
             mask_image=mask,
             width=gen_width,
             height=gen_height,
-            num_inference_steps=50,
-            guidance_scale=30,
-            max_sequence_length=512,
+            num_inference_steps=20,
+            guidance_scale=7.5,
             generator=torch.Generator(DEVICE).manual_seed(0),
         ).images[0]
 
+        mask_resized = mask
         if (gen_width, gen_height) != (original_width, original_height):
             result = result.resize((original_width, original_height))
+            mask_resized = mask.resize((original_width, original_height))
+
+        original_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        final_image = Image.composite(result, original_image, mask_resized)
 
         byte_array = io.BytesIO()
-        result.save(byte_array, format="PNG")
+        final_image.save(byte_array, format="PNG")
         return byte_array.getvalue()
 
-    def start(self):
+    def start(self) -> None:
         print(f"Starting Inpaint Service on port {self.port}")
 
         self.socket = self.context.socket(zmq.REP)
@@ -124,10 +137,10 @@ class Service:
                 if request.get("action") == "inpaint":
                     prompt = request.get("prompt")
                     mask = request.get("mask")
-                    image_path = request.get("image_path")
+                    image_bytes = request.get("image_bytes")
 
                     try:
-                        image = self.inpaint(prompt, image_path, mask)
+                        image = self.inpaint(prompt, image_bytes, mask)
 
                         response = {"status": "success", "image": image}
                         print(f"Successfully inpainted image")
@@ -180,7 +193,7 @@ class Service:
 
         self.stop()
 
-    def stop(self):
+    def stop(self) -> None:
         print("Stopping Inpainting Service...")
         self.running = False
         if self.socket:
@@ -189,12 +202,12 @@ class Service:
         print("Inpainting Service stopped")
 
 
-def signal_handler(sig, frame):
+def signal_handler(sig, frame) -> None:
     print("\nReceived shutdown signal")
     sys.exit(0)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Inpainting Service")
     parser.add_argument(
         "--port",
@@ -204,10 +217,9 @@ def main():
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     parser.add_argument(
-        "--model",
-        type=Model,
-        default=Model.stable_diffusion,
-        help="Inpainting model",
+        "--custom-checkpoint",
+        type=str,
+        help="Custom checkpoint model to use while keeping VAE, UNet from base model",
     )
 
     args = parser.parse_args()
@@ -215,7 +227,7 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    service = Service(model=args.model, port=args.port)
+    service = Service(port=args.port, custom_checkpoint=args.custom_checkpoint)
 
     try:
         service.start()

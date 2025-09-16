@@ -63,16 +63,10 @@ class Service:
             traceback.print_exc()
             print("Image selection functionality will be disabled")
 
-    def image_selection(self, prompt: str, image_path: str, threshold: float = 0.25):
-        image_path = Path(image_path)
+    def image_selection(self, prompt: str, image_bytes: bytes, threshold: float = 0.25):
+        import io
 
-        if not image_path.exists():
-            raise FileNotFoundError(f"Image file not found: {image_path}")
-
-        if image_path.suffix.lower() not in self.supported_formats:
-            raise ValueError(f"Unsupported image format: {image_path.suffix}")
-
-        image = Image.open(image_path).convert("RGB")
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
         inputs = self.gd_processor(
             images=image,
@@ -99,37 +93,27 @@ class Service:
             print("No objects detected by Grounding DINO")
             return []
 
-        # Extract bounding boxes
         boxes = gd_results[0]["boxes"]
 
-        # --- Prepare SAM2 inputs ---
-        input_boxes = [boxes.tolist()]  # add batch dim -> shape (1, num_boxes, 4)
+        input_boxes = [boxes.tolist()]
 
-        # Prepare SAM2 inputs
         sam_inputs = self.sam_processor(
             images=image,
             input_boxes=input_boxes,
             return_tensors="pt",
         ).to(DEVICE)
 
-        # --- SAM2: generate masks ---
         with torch.no_grad():
             sam_outputs = self.sam_model(**sam_inputs)
 
-        # Resize masks to original image size
         masks = self.sam_processor.post_process_masks(
             sam_outputs.pred_masks.cpu(), sam_inputs["original_sizes"]
-        )[0]  # shape: (1, num_masks, H, W)
+        )[0]
 
-        # --- Encode masks as PNGs ---
         masks_bytes = []
         for i in range(masks.shape[1]):
-            mask = masks[0, i].numpy()  # 2D mask
-
-            # Convert to alpha mask
+            mask = masks[0, i].numpy()
             mask = (mask * 255).astype(np.uint8)
-
-            # Encode as PNG
             is_success, buffer = cv2.imencode(".png", mask)
             if not is_success:
                 raise RuntimeError(f"Failed to encode mask {i}")
@@ -156,11 +140,11 @@ class Service:
 
                 if request.get("action") == "image_selection":
                     prompt = request.get("prompt")
-                    image_path = request.get("image_path")
+                    image_bytes = request.get("image_bytes")
                     threshold = request.get("threshold", 0.25)
 
                     try:
-                        selections = self.image_selection(prompt, image_path, threshold)
+                        selections = self.image_selection(prompt, image_bytes, threshold)
 
                         response = {"status": "success", "masks": selections}
                         print(f"Extracted {len(selections)} selections from image")

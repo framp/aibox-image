@@ -9,12 +9,12 @@ use serde_bytes::ByteBuf;
 pub enum Request {
     ImageSelection {
         prompt: String,
-        image_path: String,
+        image_bytes: ByteBuf,
         threshold: f32,
     },
     Inpaint {
         prompt: String,
-        image_path: String,
+        image_bytes: ByteBuf,
         mask: ByteBuf,
     },
     HealthCheck,

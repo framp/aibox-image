@@ -34,29 +34,34 @@ impl InpaintTool {
     fn fetch(&mut self, canvas: &ImageCanvas) {
         self.loading = true;
 
-        let image_path = canvas
-            .image_path
-            .as_ref()
-            .unwrap()
-            .to_string_lossy()
-            .to_string();
+        let image_data = canvas.image_data.as_ref().unwrap();
 
-        let masks = canvas.selections.iter().map(|s| s.mask.clone()).collect();
+        let mut image_buf = Vec::new();
+        image_data
+            .write_to(&mut Cursor::new(&mut image_buf), image::ImageFormat::Png)
+            .unwrap();
+
+        let masks = canvas
+            .selections
+            .iter()
+            .filter(|s| s.visible)
+            .map(|s| s.applied_mask.clone())
+            .collect();
         let input = self.input.clone();
         let tx = self.tx.clone();
 
         std::thread::spawn(move || {
             let mask = merge_masks(&masks);
-            let mut buf = Vec::new();
-            mask.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::Png)
+            let mut mask_buf = Vec::new();
+            mask.write_to(&mut Cursor::new(&mut mask_buf), image::ImageFormat::Png)
                 .unwrap();
 
             let response = zmq::request_response::<InpaintPayload>(
                 "tcp://127.0.0.1:5559",
                 zmq::Request::Inpaint {
                     prompt: input,
-                    image_path: image_path,
-                    mask: ByteBuf::from(buf),
+                    image_bytes: ByteBuf::from(image_buf),
+                    mask: ByteBuf::from(mask_buf),
                 },
             )
             .unwrap();
@@ -70,27 +75,32 @@ impl InpaintTool {
 
 impl super::Tool for InpaintTool {
     fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
-        if canvas.image_path.is_none() || canvas.selections.is_empty() {
-            ui.disable();
+        ui.label("Inpaint Tool");
+
+        let text_edit_response = ui.add(TextEdit::singleline(&mut self.input));
+
+        let has_visible_selections = canvas.selections.iter().any(|s| s.visible);
+        let can_submit = canvas.image_data.is_some() && has_visible_selections && !self.loading;
+
+        let submit = ui.add_enabled(can_submit, Button::new("Submit"));
+        let should_submit = submit.clicked()
+            || (text_edit_response.lost_focus()
+                && ui.input(|i| i.key_pressed(eframe::egui::Key::Enter)));
+
+        if should_submit && can_submit {
+            self.fetch(canvas);
         }
 
         if self.loading {
-            ui.disable();
             ui.spinner();
-        }
-
-        ui.label("Inpaint Tool");
-
-        ui.add(TextEdit::singleline(&mut self.input));
-
-        let submit = ui.add(Button::new("Submit"));
-        if submit.clicked() {
-            self.fetch(canvas);
         }
 
         if let Ok(image) = self.rx.try_recv() {
             self.loading = false;
-            canvas.set_image(image, None, ui.ctx());
+            canvas.set_image(image, ui.ctx());
+            for selection in &mut canvas.selections {
+                selection.visible = false;
+            }
         }
     }
 }
@@ -108,7 +118,6 @@ fn merge_masks(images: &Vec<GrayImage>) -> GrayImage {
     for img in images {
         for (x, y, pixel) in img.enumerate_pixels() {
             if pixel[0] != 0 {
-                // only write if source pixel is not black
                 canvas.put_pixel(x, y, *pixel);
             }
         }
