@@ -185,6 +185,10 @@ impl ImageCanvas {
                 eframe::egui::Color32::WHITE,
             );
 
+            println!(
+                "DEBUG: Canvas rendering {} selection overlays",
+                self.selections.len()
+            );
             for selection in &self.selections {
                 selection.overlay(ui, image_rect);
             }

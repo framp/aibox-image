@@ -7,13 +7,15 @@ use eframe::egui::{Button, TextEdit, Ui};
 use image::{DynamicImage, GrayImage, Luma};
 use serde_bytes::ByteBuf;
 
-use crate::{ai_tools::zmq::InpaintPayload, image_canvas::ImageCanvas};
+use crate::{
+    ai_tools::zmq::InpaintPayload, image_canvas::ImageCanvas, layer_system::LayerOperation,
+    mask_gallery::MaskGallery, undo_redo::UndoRedoManager,
+};
 
 use super::zmq;
 
 pub struct InpaintTool {
     input: String,
-
     loading: bool,
     tx: Sender<DynamicImage>,
     rx: Receiver<DynamicImage>,
@@ -69,7 +71,13 @@ impl InpaintTool {
 }
 
 impl super::Tool for InpaintTool {
-    fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
+    fn show(
+        &mut self,
+        ui: &mut Ui,
+        canvas: &mut ImageCanvas,
+        _mask_gallery: &mut MaskGallery,
+        _undo_redo_manager: &mut UndoRedoManager,
+    ) -> Option<LayerOperation> {
         if canvas.image_path.is_none() || canvas.selections.is_empty() {
             ui.disable();
         }
@@ -90,8 +98,13 @@ impl super::Tool for InpaintTool {
 
         if let Ok(image) = self.rx.try_recv() {
             self.loading = false;
-            canvas.set_image(image, None, ui.ctx());
+            // Instead of modifying canvas directly, return a layer operation
+            // to create a new layer with the inpainted result
+            let layer_name = format!("Inpainted - {}", self.input);
+            return Some(LayerOperation::AddLayerWithImage(layer_name, image));
         }
+
+        None
     }
 }
 
