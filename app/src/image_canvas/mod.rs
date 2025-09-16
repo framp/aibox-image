@@ -22,7 +22,7 @@ pub struct Selection {
 impl Selection {
     pub fn from_mask(ctx: &eframe::egui::Context, mask: GrayImage) -> Self {
         let (width, height) = mask.dimensions();
-        let default_growth = ((width + height) as f32 / 2.0 / 60.0).round() as i32;
+        let default_growth = ((width + height) as f32 / 2.0 / 90.0).round() as i32;
         let default_blur = 10u32;
 
         let original_mask = mask.clone();
