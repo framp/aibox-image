@@ -45,7 +45,7 @@ impl InpaintTool {
             .selections
             .iter()
             .filter(|s| s.visible)
-            .map(|s| s.mask.clone())
+            .map(|s| s.applied_mask.clone())
             .collect();
         let input = self.input.clone();
         let tx = self.tx.clone();
@@ -77,13 +77,17 @@ impl super::Tool for InpaintTool {
     fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
         ui.label("Inpaint Tool");
 
-        ui.add(TextEdit::singleline(&mut self.input));
+        let text_edit_response = ui.add(TextEdit::singleline(&mut self.input));
 
         let has_visible_selections = canvas.selections.iter().any(|s| s.visible);
         let can_submit = canvas.image_data.is_some() && has_visible_selections && !self.loading;
 
         let submit = ui.add_enabled(can_submit, Button::new("Submit"));
-        if submit.clicked() {
+        let should_submit = submit.clicked()
+            || (text_edit_response.lost_focus()
+                && ui.input(|i| i.key_pressed(eframe::egui::Key::Enter)));
+
+        if should_submit && can_submit {
             self.fetch(canvas);
         }
 

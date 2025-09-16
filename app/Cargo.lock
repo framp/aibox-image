@@ -134,6 +134,7 @@ dependencies = [
  "eframe",
  "egui_extras",
  "env_logger",
+ "fast_morphology",
  "image",
  "rfd",
  "rmp-serde",
@@ -1249,6 +1250,16 @@ dependencies = [
  "rayon-core",
  "smallvec",
  "zune-inflate",
+]
+
+[[package]]
+name = "fast_morphology"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32d8580ec514f0a59526b27a684d71918469b63e8736306b0bf705f48f4f00c8"
+dependencies = [
+ "num-traits",
+ "rayon",
 ]
 
 [[package]]

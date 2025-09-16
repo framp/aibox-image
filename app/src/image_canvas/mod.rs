@@ -1,4 +1,8 @@
 use eframe::egui::{Color32, ColorImage, TextureHandle, Vec2};
+use fast_morphology::{
+    BorderMode, ImageSize, KernelShape, MorphExOp, MorphScalar, MorphologyThreadingPolicy,
+    morphology,
+};
 use image::{DynamicImage, GrayImage};
 
 use std::path::PathBuf;
@@ -8,16 +12,26 @@ pub struct Selection {
     pub mask_texture: TextureHandle,
     pub overlay_texture: TextureHandle,
     pub mask: GrayImage,
+    pub original_mask: GrayImage,
+    pub applied_mask: GrayImage,
+    pub growth: i32,
+    pub blur: u32,
     pub visible: bool,
 }
 
 impl Selection {
     pub fn from_mask(ctx: &eframe::egui::Context, mask: GrayImage) -> Self {
         let (width, height) = mask.dimensions();
+        let default_growth = ((width + height) as f32 / 2.0 / 60.0).round() as i32;
+        let default_blur = 10u32;
 
-        // Convert grayscale to ColorImage, using the grayscale as alpha
-        // So that we can apply color to it
-        let pixels = mask
+        let original_mask = mask.clone();
+        let preview_mask = Self::apply_growth_only(&original_mask, default_growth);
+        let applied_mask =
+            Self::apply_transforms(&original_mask, default_growth, true, default_blur);
+
+        // Convert preview mask to textures (only growth, no blur)
+        let pixels = preview_mask
             .pixels()
             .flat_map(|p| {
                 let mask_alpha = p[0];
@@ -32,16 +46,117 @@ impl Selection {
         );
         let mask_texture = ctx.load_texture(
             "",
-            ColorImage::from_gray([width as usize, height as usize], mask.as_raw()),
+            ColorImage::from_gray([width as usize, height as usize], preview_mask.as_raw()),
             Default::default(),
         );
 
         Self {
             mask_texture,
             overlay_texture,
-            mask,
+            mask: preview_mask,
+            original_mask,
+            applied_mask,
+            growth: default_growth,
+            blur: default_blur,
             visible: true,
         }
+    }
+
+    pub fn update_applied_mask(&mut self, ctx: &eframe::egui::Context) {
+        // Update preview mask (growth only, no blur for preview)
+        let preview_mask = Self::apply_growth_only(&self.original_mask, self.growth);
+        self.mask = preview_mask.clone();
+
+        // Update applied mask (growth + blur for inpainting)
+        self.applied_mask =
+            Self::apply_transforms(&self.original_mask, self.growth, true, self.blur);
+
+        let (width, height) = preview_mask.dimensions();
+
+        // Update textures with preview mask (no blur)
+        let pixels = preview_mask
+            .pixels()
+            .flat_map(|p| {
+                let mask_alpha = p[0];
+                Color32::from_white_alpha(mask_alpha).to_array()
+            })
+            .collect::<Vec<_>>();
+
+        self.overlay_texture = ctx.load_texture(
+            "",
+            ColorImage::from_rgba_unmultiplied([width as usize, height as usize], &pixels),
+            Default::default(),
+        );
+        self.mask_texture = ctx.load_texture(
+            "",
+            ColorImage::from_gray([width as usize, height as usize], preview_mask.as_raw()),
+            Default::default(),
+        );
+    }
+
+    fn apply_transforms(mask: &GrayImage, growth: i32, apply_blur: bool, blur: u32) -> GrayImage {
+        let mut result = mask.clone();
+
+        if growth != 0 {
+            let abs_growth = growth.abs() as u32;
+            if abs_growth > 0 {
+                let kernel_size = abs_growth * 2 + 1; // Ensure odd kernel size
+                let (width, height) = result.dimensions();
+
+                // Create a disk structuring element
+                let se_size = kernel_size as usize;
+                let mut structuring_element = vec![0u8; se_size * se_size];
+                let radius = se_size as f32 / 2.0;
+                let center = se_size / 2;
+
+                for y in 0..se_size {
+                    for x in 0..se_size {
+                        let dx = x as f32 - center as f32;
+                        let dy = y as f32 - center as f32;
+                        if (dx * dx + dy * dy).sqrt() <= radius {
+                            structuring_element[y * se_size + x] = 255;
+                        }
+                    }
+                }
+
+                let mut dst = vec![0u8; (width * height) as usize];
+
+                let op = if growth > 0 {
+                    MorphExOp::Dilate
+                } else {
+                    MorphExOp::Erode
+                };
+
+                morphology(
+                    result.as_raw(),
+                    &mut dst,
+                    op,
+                    ImageSize::new(width as usize, height as usize),
+                    &structuring_element,
+                    KernelShape::new(se_size, se_size),
+                    BorderMode::default(),
+                    MorphScalar::default(),
+                    MorphologyThreadingPolicy::default(),
+                )
+                .unwrap();
+
+                result = GrayImage::from_raw(width, height, dst).unwrap();
+            }
+        }
+
+        // Apply fast blur only if requested (for inpainting, not preview)
+        if apply_blur && blur > 0 {
+            let sigma = blur as f32 / 3.0;
+            let dynamic_result = DynamicImage::ImageLuma8(result);
+            result = dynamic_result.fast_blur(sigma).into_luma8();
+        }
+
+        result
+    }
+
+    // Helper function for preview (growth only, no blur)
+    fn apply_growth_only(mask: &GrayImage, growth: i32) -> GrayImage {
+        Self::apply_transforms(mask, growth, false, 0)
     }
 
     pub fn overlay(&self, ui: &mut eframe::egui::Ui, rect: eframe::egui::Rect) {
