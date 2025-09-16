@@ -34,10 +34,8 @@ impl InpaintTool {
     fn fetch(&mut self, canvas: &ImageCanvas) {
         self.loading = true;
 
-        // Get the image bytes from the canvas image data
         let image_data = canvas.image_data.as_ref().unwrap();
 
-        // Convert to PNG bytes
         let mut image_buf = Vec::new();
         image_data
             .write_to(&mut Cursor::new(&mut image_buf), image::ImageFormat::Png)
@@ -91,7 +89,6 @@ impl super::Tool for InpaintTool {
         if let Ok(image) = self.rx.try_recv() {
             self.loading = false;
             canvas.set_image(image, ui.ctx());
-            // Disable all selections so user can see the inpainting result
             for selection in &mut canvas.selections {
                 selection.visible = false;
             }
@@ -112,7 +109,6 @@ fn merge_masks(images: &Vec<GrayImage>) -> GrayImage {
     for img in images {
         for (x, y, pixel) in img.enumerate_pixels() {
             if pixel[0] != 0 {
-                // only write if source pixel is not black
                 canvas.put_pixel(x, y, *pixel);
             }
         }

@@ -2,7 +2,6 @@ use eframe::egui::{Color32, ColorImage, TextureHandle, Vec2};
 use image::{DynamicImage, GrayImage};
 
 use std::path::PathBuf;
-// No longer need SharedCanvas type - we'll pass &mut ImageCanvas directly
 
 #[derive(Clone)]
 pub struct Selection {

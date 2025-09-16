@@ -31,10 +31,8 @@ impl SelectionTool {
     fn fetch(&mut self, canvas: &ImageCanvas) {
         self.loading = true;
 
-        // Get the image bytes from the canvas image data
         let image_data = canvas.image_data.as_ref().unwrap();
 
-        // Convert to PNG bytes
         let mut image_buf = Vec::new();
         image_data
             .write_to(
@@ -129,7 +127,6 @@ impl super::Tool for SelectionTool {
 
                 for (i, sel) in canvas.selections.iter().enumerate() {
                     ui.horizontal(|ui| {
-                        // Show the texture as a small thumbnail
                         let size = sel.overlay_texture.size_vec2();
                         let max_side = 128.0;
                         let scale = (max_side / size.x.max(size.y)).min(1.0);
