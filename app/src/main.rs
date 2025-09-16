@@ -75,19 +75,7 @@ impl ImageEditorApp {
     }
 
     fn save_image(&mut self) {
-        if let Some(current_path) = &self.image_canvas.image_path {
-            match self.save_to_path(current_path.clone()) {
-                Ok(()) => {
-                    self.error_message = None;
-                    println!("Saved to: {:?}", current_path);
-                }
-                Err(e) => {
-                    self.error_message = Some(format!("Save failed: {}", e));
-                }
-            }
-        } else {
-            self.save_as_image();
-        }
+        self.save_as_image();
     }
 
     fn save_as_image(&mut self) {
@@ -101,7 +89,6 @@ impl ImageEditorApp {
             match self.save_to_path(path.clone()) {
                 Ok(()) => {
                     self.error_message = None;
-                    self.image_canvas.image_path = Some(path.clone());
                     println!("Saved as: {:?}", path);
                 }
                 Err(e) => {
@@ -112,14 +99,12 @@ impl ImageEditorApp {
     }
 
     fn save_to_path(&self, path: std::path::PathBuf) -> Result<(), String> {
-        if let Some(_texture) = &self.image_canvas.texture {
-            if let Some(original_path) = &self.image_canvas.image_path {
-                std::fs::copy(original_path, &path)
-                    .map_err(|e| format!("Failed to save file: {}", e))?;
-                Ok(())
-            } else {
-                Err("No original image data available".to_string())
-            }
+        if let Some(image_data) = &self.image_canvas.image_data {
+            // Save the image data directly
+            image_data
+                .save(&path)
+                .map_err(|e| format!("Failed to save file: {}", e))?;
+            Ok(())
         } else {
             Err("No image loaded".to_string())
         }

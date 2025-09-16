@@ -61,8 +61,8 @@ impl Selection {
 }
 
 pub struct ImageCanvas {
-    pub image_path: Option<PathBuf>,
     pub texture: Option<TextureHandle>,
+    pub image_data: Option<DynamicImage>,
     pub image_size: Vec2,
     pub zoom: f32,
     pub offset: Vec2,
@@ -74,8 +74,8 @@ pub struct ImageCanvas {
 impl Default for ImageCanvas {
     fn default() -> Self {
         Self {
-            image_path: None,
             texture: None,
+            image_data: None,
             image_size: Vec2::ZERO,
             zoom: 1.0,
             offset: Vec2::ZERO,
@@ -99,32 +99,18 @@ impl ImageCanvas {
         }
     }
 
-    pub fn set_image(
-        &mut self,
-        image: DynamicImage,
-        path: Option<PathBuf>,
-        ctx: &eframe::egui::Context,
-    ) {
+    pub fn set_image(&mut self, image: DynamicImage, ctx: &eframe::egui::Context) {
         let rgba_image = image.to_rgba8();
         let (width, height) = rgba_image.dimensions();
 
         let color_image =
             ColorImage::from_rgba_unmultiplied([width as usize, height as usize], &rgba_image);
 
-        let texture = ctx.load_texture(
-            format!(
-                "image_{}",
-                path.as_ref()
-                    .map(|p| p.file_name().unwrap_or_default().to_string_lossy())
-                    .unwrap_or("memory".into())
-            ),
-            color_image,
-            Default::default(),
-        );
+        let texture = ctx.load_texture("image", color_image, Default::default());
 
-        self.image_path = path;
         self.image_size = Vec2::new(width as f32, height as f32);
         self.texture = Some(texture);
+        self.image_data = Some(image);
         self.zoom = 1.0;
         self.offset = Vec2::ZERO;
     }
@@ -134,7 +120,7 @@ impl ImageCanvas {
 
         match image_result {
             Ok(dynamic_image) => {
-                self.set_image(dynamic_image, Some(path), ctx);
+                self.set_image(dynamic_image, ctx);
 
                 Ok(())
             }
@@ -219,7 +205,7 @@ impl ImageCanvas {
 
     pub fn clear_image(&mut self) {
         self.texture = None;
-        self.image_path = None;
+        self.image_data = None;
         self.image_size = Vec2::ZERO;
         self.zoom = 1.0;
         self.offset = Vec2::ZERO;

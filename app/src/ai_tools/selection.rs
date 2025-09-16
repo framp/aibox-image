@@ -31,12 +31,18 @@ impl SelectionTool {
     fn fetch(&mut self, canvas: &ImageCanvas) {
         self.loading = true;
 
-        let image_path = canvas
-            .image_path
-            .as_ref()
-            .unwrap()
-            .to_string_lossy()
-            .to_string();
+        // Get the image bytes from the canvas image data
+        let image_data = canvas.image_data.as_ref().unwrap();
+
+        // Convert to PNG bytes
+        let mut image_buf = Vec::new();
+        image_data
+            .write_to(
+                &mut std::io::Cursor::new(&mut image_buf),
+                image::ImageFormat::Png,
+            )
+            .unwrap();
+
         let input = self.input.clone();
         let threshold = self.threshold;
         let tx = self.tx.clone();
@@ -46,7 +52,7 @@ impl SelectionTool {
                 "tcp://127.0.0.1:5558",
                 zmq::Request::ImageSelection {
                     prompt: input,
-                    image_path: image_path,
+                    image_bytes: serde_bytes::ByteBuf::from(image_buf),
                     threshold,
                 },
             )
@@ -72,15 +78,6 @@ impl SelectionTool {
 
 impl super::Tool for SelectionTool {
     fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
-        if canvas.image_path.is_none() {
-            ui.disable();
-        }
-
-        if self.loading {
-            ui.disable();
-            ui.spinner();
-        }
-
         ui.label("Selection Tool");
 
         ui.add(TextEdit::singleline(&mut self.input));
@@ -90,7 +87,9 @@ impl super::Tool for SelectionTool {
             ui.add(Slider::new(&mut self.threshold, 0.0..=1.0).step_by(0.01));
         });
 
-        let submit = ui.add(Button::new("Submit"));
+        let can_submit = canvas.image_data.is_some() && !self.loading;
+
+        let submit = ui.add_enabled(can_submit, Button::new("Submit"));
         if submit.clicked() {
             self.fetch(canvas);
         }
@@ -107,6 +106,10 @@ impl super::Tool for SelectionTool {
                 ui.ctx(),
                 GrayImage::from_pixel(size.x as u32, size.y as u32, Luma([255])),
             ));
+        }
+
+        if self.loading {
+            ui.spinner();
         }
 
         if let Ok(selections) = self.rx.try_recv() {
