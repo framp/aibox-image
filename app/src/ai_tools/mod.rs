@@ -1,22 +1,13 @@
 use eframe::egui::Ui;
 
-use crate::{
-    image_canvas::ImageCanvas, layer_system::LayerOperation, mask_gallery::MaskGallery,
-    undo_redo::UndoRedoManager,
-};
+use crate::image_canvas::ImageCanvas;
 
 mod inpaint;
 mod selection;
 mod zmq;
 
 pub trait Tool {
-    fn show(
-        &mut self,
-        ui: &mut Ui,
-        canvas: &mut ImageCanvas,
-        mask_gallery: &mut MaskGallery,
-        undo_redo_manager: &mut UndoRedoManager,
-    ) -> Option<LayerOperation>;
+    fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas);
 }
 
 #[derive(Default)]
@@ -34,26 +25,13 @@ impl ToolsPanel {
         Self { tools }
     }
 
-    pub fn show(
-        &mut self,
-        ui: &mut Ui,
-        canvas: &mut ImageCanvas,
-        mask_gallery: &mut MaskGallery,
-        undo_redo_manager: &mut UndoRedoManager,
-        _has_image: bool,
-    ) -> Vec<LayerOperation> {
+    pub fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas, has_image: bool) {
         ui.heading("🛠 Tools");
 
-        let mut layer_operations = Vec::new();
-
-        for (_i, tool) in self.tools.iter_mut().enumerate() {
+        for (i, tool) in self.tools.iter_mut().enumerate() {
             ui.separator();
             ui.add_space(5.0);
-            if let Some(operation) = tool.show(ui, canvas, mask_gallery, undo_redo_manager) {
-                layer_operations.push(operation);
-            }
+            tool.show(ui, canvas);
         }
-
-        layer_operations
     }
 }

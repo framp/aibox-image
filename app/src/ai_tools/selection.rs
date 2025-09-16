@@ -3,12 +3,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use eframe::egui::{Button, Checkbox, CollapsingHeader, Image, Slider, TextEdit, Ui};
 use image::{DynamicImage, GrayImage, Luma};
 
-use crate::{
-    image_canvas::{ImageCanvas, Selection},
-    layer_system::LayerOperation,
-    mask_gallery::MaskGallery,
-    undo_redo::UndoRedoManager,
-};
+use crate::image_canvas::{ImageCanvas, Selection};
 
 use super::zmq;
 
@@ -58,30 +53,25 @@ impl SelectionTool {
             .unwrap();
 
             if let zmq::Response::Success(payload) = response {
-                let zmq::ImageSelectionPayload { masks } = payload;
-                let selections = masks
-                    .into_iter()
-                    .filter_map(|mask_bytes| {
-                        image::load_from_memory(&mask_bytes)
-                            .ok()
-                            .map(|img: DynamicImage| img.into_luma8())
-                    })
-                    .collect::<Vec<_>>();
+                if let zmq::ImageSelectionPayload { masks } = payload {
+                    let selections = masks
+                        .into_iter()
+                        .filter_map(|mask_bytes| {
+                            image::load_from_memory(&mask_bytes)
+                                .ok()
+                                .map(|img: DynamicImage| img.into_luma8())
+                        })
+                        .collect::<Vec<_>>();
 
-                let _ = tx.send(selections);
+                    let _ = tx.send(selections);
+                }
             }
         });
     }
 }
 
 impl super::Tool for SelectionTool {
-    fn show(
-        &mut self,
-        ui: &mut Ui,
-        canvas: &mut ImageCanvas,
-        mask_gallery: &mut MaskGallery,
-        _undo_redo_manager: &mut UndoRedoManager,
-    ) -> Option<LayerOperation> {
+    fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
         if canvas.image_path.is_none() {
             ui.disable();
         }
@@ -121,14 +111,10 @@ impl super::Tool for SelectionTool {
 
         if let Ok(selections) = self.rx.try_recv() {
             self.loading = false;
-            // Only take the first mask
-            if let Some(first_mask) = selections.into_iter().next() {
-                canvas.selections = vec![Selection::from_mask(ui.ctx(), first_mask.clone())];
-
-                // Automatically add the selection to the mask gallery
-                let mask_name = format!("Selection {}", mask_gallery.masks.len() + 1);
-                mask_gallery.add_mask(mask_name, first_mask, ui.ctx());
-            }
+            canvas.selections = selections
+                .into_iter()
+                .map(|img| Selection::from_mask(ui.ctx(), img))
+                .collect();
         }
 
         CollapsingHeader::new("Selections")
@@ -177,8 +163,6 @@ impl super::Tool for SelectionTool {
                     canvas.selections.remove(i);
                 }
             });
-
-        None
     }
 }
 
