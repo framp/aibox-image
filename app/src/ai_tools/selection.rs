@@ -114,7 +114,13 @@ impl super::Tool for SelectionTool {
             self.loading = false;
             canvas.selections = selections
                 .into_iter()
-                .map(|img| Selection::from_mask(ui.ctx(), img))
+                .enumerate()
+                .map(|(i, img)| {
+                    let mut selection = Selection::from_mask(ui.ctx(), img);
+                    // Only enable the first mask, disable all others
+                    selection.visible = i == 0;
+                    selection
+                })
                 .collect();
         }
 

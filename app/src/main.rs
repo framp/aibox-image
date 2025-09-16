@@ -100,7 +100,6 @@ impl ImageEditorApp {
 
     fn save_to_path(&self, path: std::path::PathBuf) -> Result<(), String> {
         if let Some(image_data) = &self.image_canvas.image_data {
-            // Save the image data directly
             image_data
                 .save(&path)
                 .map_err(|e| format!("Failed to save file: {}", e))?;
