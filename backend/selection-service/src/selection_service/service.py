@@ -1,21 +1,10 @@
-import argparse
 import logging
-import signal
-import sys
-import time
-import traceback
 from pathlib import Path
-from typing import List
+from typing import cast
 
-import cv2
-import msgpack
 import numpy as np
 import torch
-import zmq
-from aibox_image_lib.transport import BaseRequest, BaseResponse, Transport
-from aibox_image_lib.transport.zmq import ZmqTransport
 from PIL import Image
-from pydantic import BaseModel
 from transformers import (
     AutoModelForZeroShotObjectDetection,
     AutoProcessor,
@@ -30,22 +19,12 @@ DEVICE = (
     if torch.cuda.is_available()
     else "cpu"
 )
+
 GROUNDING_DINO_MODEL = "IDEA-Research/grounding-dino-base"
 SAM_MODEL = "facebook/sam2.1-hiera-large"
 
 GD_THRESHOLD = 0.25
 GD_TEXT_THRESHOLD = 0.15
-
-
-class ImageSelectionRequest(BaseRequest):
-    prompt: str
-    image_bytes: bytes
-    threshold: float = 0.25
-
-
-class ImageSelectionResponse(BaseResponse):
-    status: str
-    masks: List[bytes]
 
 
 class Service:
@@ -81,11 +60,7 @@ class Service:
             logging.warning("Could not load LLM model", exc_info=True)
             logging.info("Image selection functionality will be disabled")
 
-    def image_selection(self, prompt: str, image_bytes: bytes, threshold: float = 0.25):
-        import io
-
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-
+    def image_selection(self, prompt: str, image: Image.Image, threshold: float):
         inputs = self.gd_processor(
             images=image,
             text=[prompt],
@@ -109,7 +84,7 @@ class Service:
             or len(gd_results[0]["boxes"]) == 0
         ):
             logging.info("No objects detected by Grounding DINO")
-            return []
+            return cast(list[Image.Image], [])
 
         boxes = gd_results[0]["boxes"]
 
@@ -128,66 +103,13 @@ class Service:
             sam_outputs.pred_masks.cpu(), sam_inputs["original_sizes"]
         )[0]
 
-        masks_bytes = []
+        # return masks
+        mask_images: list[Image.Image] = []
         for i in range(masks.shape[1]):
             mask = masks[0, i].numpy()
             mask = (mask * 255).astype(np.uint8)
-            is_success, buffer = cv2.imencode(".png", mask)
-            if not is_success:
-                raise RuntimeError(f"Failed to encode mask {i}")
 
-            masks_bytes.append(buffer.tobytes())
+            image = Image.fromarray(mask, mode="L")
+            mask_images.append(image)
 
-        return masks_bytes
-
-
-def signal_handler(sig, frame):
-    logging.info("Received shutdown signal")
-    sys.exit(0)
-
-
-def main():
-    parser = argparse.ArgumentParser(description="LLM Text Processing Service")
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=5558,
-        help="Port to bind the service (default: 5558)",
-    )
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    parser.add_argument(
-        "--cache-dir",
-        type=str,
-        default="../../model-cache",
-        help="Model cache directory",
-    )
-
-    args = parser.parse_args()
-
-    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
-
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-
-    transport = ZmqTransport()
-    service = Service(cache_dir=args.cache_dir)
-
-    @transport.handler("image_selection")
-    def image_selection(request: ImageSelectionRequest):
-        masks = service.image_selection(
-            request.prompt, request.image_bytes, request.threshold
-        )
-        return ImageSelectionResponse(status="success", masks=masks)
-
-    try:
-        transport.start(port=args.port)
-    except KeyboardInterrupt:
-        logging.info("Shutdown requested")
-    except Exception:
-        logging.error("Service error", exc_info=True)
-    finally:
-        transport.stop()
-
-
-if __name__ == "__main__":
-    main()
+            return mask_images
