@@ -5,5 +5,10 @@
     { "path": "backend/aibox-image-lib" },
     { "path": "backend/inpainting-service" },
     { "path": "backend/selection-service" }
-  ]
+  ],
+  "settings": {
+    "ruff.interpreter": [
+      "${workspaceFolder}/backend/aibox-image-lib/.venv/bin/python"
+    ]
+  }
 }
