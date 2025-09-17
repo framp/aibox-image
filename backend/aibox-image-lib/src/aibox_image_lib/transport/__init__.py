@@ -1,3 +1,4 @@
+import logging
 from abc import ABC, abstractmethod
 from typing import Callable, Type, TypeVar
 
@@ -12,16 +13,18 @@ class BaseResponse(BaseModel):
     pass
 
 
-ReqT = TypeVar("Req", bound=BaseRequest)
-RespT = TypeVar("Resp", bound=BaseResponse)
+Req = TypeVar("Req", bound=BaseRequest)
+Resp = TypeVar("Resp", bound=BaseResponse)
 
 
 class Transport(ABC):
     def __init__(self):
-        # name -> (function, request_model, response_model)
-        self._handlers: dict[str, tuple[Callable[[ReqT], RespT], Type[ReqT]]] = {}
+        # name -> (function, request_model)
+        self._handlers: dict[
+            str, tuple[Callable[[BaseRequest], BaseResponse], Type[BaseRequest]]
+        ] = {}
 
-    def handler(self, name: str = None) -> RespT:
+    def handler(self, name: str | None = None):
         """
         Marks a method as a handler.
         """
@@ -46,7 +49,7 @@ class Transport(ABC):
 
     def _handle(self, raw_request: bytes) -> bytes:
         request = self._parse(raw_request, BaseRequest)
-        print(f"Handling request {request.action}")
+        logging.info(f"Handling request {request.action}")
 
         func, req_model = self._handlers[request.action]
 
@@ -59,19 +62,19 @@ class Transport(ABC):
             )
 
         serialized = self._serialize(resp_obj)
-        print(f"Handled request {request.action}")
+        logging.info(f"Handled request {request.action}")
 
         return serialized
 
     @abstractmethod
-    def _parse(self, request: bytes, model: type[ReqT]) -> ReqT:
+    def _parse(self, request: bytes, model: type[Req]) -> Req:
         """
         Parse a request from the transport protocol.
         """
         ...
 
     @abstractmethod
-    def _serialize(self, response: RespT) -> bytes:
+    def _serialize(self, response: BaseResponse) -> bytes:
         """
         Serialize a request to the transport protocol.
         """

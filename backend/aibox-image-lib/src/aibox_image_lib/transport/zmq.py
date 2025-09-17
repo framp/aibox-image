@@ -1,9 +1,10 @@
-from typing import Type
+import logging
+from typing import Type, cast
 
 import msgpack
 import zmq
 
-from . import ReqT, RespT, Transport
+from . import BaseResponse, Req, Transport
 
 
 class ZmqTransport(Transport):
@@ -13,30 +14,30 @@ class ZmqTransport(Transport):
         self.socket = None
         self.context = None
 
-    def _parse(self, raw: bytes, model: Type[ReqT]) -> ReqT:
-        data = msgpack.unpackb(raw, raw=False)
+    def _parse(self, request: bytes, model: Type[Req]) -> Req:
+        data = msgpack.unpackb(request, raw=False)
         return model(**data)
 
-    def _serialize(self, response: RespT) -> bytes:
-        return msgpack.packb(response.model_dump(), use_bin_type=True)
+    def _serialize(self, response: BaseResponse) -> bytes:
+        return cast(bytes, msgpack.packb(response.model_dump(), use_bin_type=True))
 
     def start(self, port: int):
         if self.context or self.socket:
             raise ValueError("ZmqTransport already started")
 
-        print("Starting ZmqTransport...")
+        logging.info("Starting ZmqTransport...")
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REP)
         self.socket.bind(f"tcp://*:{port}")
 
-        print(f"ZmqTransport started on port {port}")
+        logging.info(f"ZmqTransport started on port {port}")
         while self.context:
             message = self.socket.recv()
             response = self._handle(message)
             self.socket.send(response)
 
     def stop(self):
-        print("Stopping ZmqTransport...")
+        logging.info("Stopping ZmqTransport...")
 
         if self.socket:
             self.socket.close()
@@ -45,4 +46,4 @@ class ZmqTransport(Transport):
             self.context.term()
             self.context = None
 
-        print("ZmqTransport stopped")
+        logging.info("ZmqTransport stopped")

@@ -1,4 +1,5 @@
 import argparse
+import logging
 import signal
 import sys
 import time
@@ -56,30 +57,29 @@ class Service:
 
     def _init_models(self):
         try:
-            print(f"Loading Grounding DINO {GROUNDING_DINO_MODEL} on {DEVICE}...")
+            logging.info(
+                f"Loading Grounding DINO {GROUNDING_DINO_MODEL} on {DEVICE}..."
+            )
             self.gd_processor = AutoProcessor.from_pretrained(
                 GROUNDING_DINO_MODEL, cache_dir=self.cache_dir
             )
             self.gd_model = AutoModelForZeroShotObjectDetection.from_pretrained(
                 GROUNDING_DINO_MODEL, cache_dir=self.cache_dir
             ).to(DEVICE)
-            print("Grounding DINO loaded successfully")
+            logging.info("Grounding DINO loaded successfully")
 
-            print(f"Loading SAM2 {SAM_MODEL} on {DEVICE}...")
+            logging.info(f"Loading SAM2 {SAM_MODEL} on {DEVICE}...")
             self.sam_processor = Sam2Processor.from_pretrained(
                 SAM_MODEL, cache_dir=self.cache_dir
             )
             self.sam_model = Sam2Model.from_pretrained(
                 SAM_MODEL, cache_dir=self.cache_dir
             ).to(DEVICE)
-            print("SAM2 loaded successfully")
+            logging.info("SAM2 loaded successfully")
 
-        except Exception as e:
-            print(f"Warning: Could not load LLM model: {e}")
-            import traceback
-
-            traceback.print_exc()
-            print("Image selection functionality will be disabled")
+        except Exception:
+            logging.warning("Could not load LLM model", exc_info=True)
+            logging.info("Image selection functionality will be disabled")
 
     def image_selection(self, prompt: str, image_bytes: bytes, threshold: float = 0.25):
         import io
@@ -108,7 +108,7 @@ class Service:
             or "boxes" not in gd_results[0]
             or len(gd_results[0]["boxes"]) == 0
         ):
-            print("No objects detected by Grounding DINO")
+            logging.info("No objects detected by Grounding DINO")
             return []
 
         boxes = gd_results[0]["boxes"]
@@ -142,7 +142,7 @@ class Service:
 
 
 def signal_handler(sig, frame):
-    print("\nReceived shutdown signal")
+    logging.info("Received shutdown signal")
     sys.exit(0)
 
 
@@ -164,6 +164,8 @@ def main():
 
     args = parser.parse_args()
 
+    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
+
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
@@ -180,10 +182,9 @@ def main():
     try:
         transport.start(port=args.port)
     except KeyboardInterrupt:
-        print("\nShutdown requested")
-    except Exception as e:
-        print(f"Service error: {e}")
-        print(traceback.format_exc())
+        logging.info("Shutdown requested")
+    except Exception:
+        logging.error("Service error", exc_info=True)
     finally:
         transport.stop()
 
