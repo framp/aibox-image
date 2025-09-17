@@ -10,6 +10,7 @@ from typing import Optional
 import msgpack
 import torch
 import zmq
+from aibox_image_lib import hello
 from diffusers import StableDiffusionInpaintPipeline
 from dotenv import load_dotenv
 from huggingface_hub import login
