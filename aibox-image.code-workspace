@@ -1,0 +1,9 @@
+{
+  "folders": [
+    { "path": ".", "name": "root" },
+    { "path": "app" },
+    { "path": "backend/aibox-image-lib" },
+    { "path": "backend/inpainting-service" },
+    { "path": "backend/selection-service" }
+  ]
+}
