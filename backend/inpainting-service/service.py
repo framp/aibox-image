@@ -4,6 +4,7 @@ import os
 import signal
 import sys
 import time
+from pathlib import Path
 from typing import Optional
 
 import msgpack
@@ -33,7 +34,9 @@ def get_dimensions_divisible_by_8(width: int, height: int) -> tuple[int, int]:
 
 
 class Service:
-    def __init__(self, port: int = 5557, custom_checkpoint: Optional[str] = None):
+    def __init__(
+        self, cache_dir: Path, port: int = 5557, custom_checkpoint: Optional[str] = None
+    ):
         self.port = port
         self.context = zmq.Context()
         self.socket: Optional[zmq.Socket] = None
@@ -41,6 +44,7 @@ class Service:
         self.custom_checkpoint = custom_checkpoint
         self.model: Optional[StableDiffusionInpaintPipeline] = None
         self.model_name: str = ""
+        self.cache_dir = cache_dir
 
         self.supported_formats = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
 
@@ -49,19 +53,23 @@ class Service:
     def _init_models(self) -> None:
         try:
             if self.custom_checkpoint:
-                print(f"Loading custom checkpoint: {self.custom_checkpoint} on {DEVICE}...")
+                print(
+                    f"Loading custom checkpoint: {self.custom_checkpoint} on {DEVICE}..."
+                )
                 self.model_name = self.custom_checkpoint
                 # Check if it's a single file (.safetensors or .ckpt)
-                if self.custom_checkpoint.endswith(('.safetensors', '.ckpt')):
+                if self.custom_checkpoint.endswith((".safetensors", ".ckpt")):
                     self.model = StableDiffusionInpaintPipeline.from_single_file(
                         self.custom_checkpoint,
                         torch_dtype=torch.float16,
+                        cache_dir=self.cache_dir,
                     ).to(DEVICE)
                 else:
                     # It's a directory or repo ID
                     self.model = StableDiffusionInpaintPipeline.from_pretrained(
                         self.custom_checkpoint,
                         torch_dtype=torch.float16,
+                        cache_dir=self.cache_dir,
                     ).to(DEVICE)
             else:
                 print(f"Loading {SD_MODEL} on {DEVICE}...")
@@ -69,7 +77,11 @@ class Service:
                 self.model = StableDiffusionInpaintPipeline.from_pretrained(
                     SD_MODEL,
                     torch_dtype=torch.float16,
+                    cache_dir=self.cache_dir,
                 ).to(DEVICE)
+
+            self.model.safety_checker = None
+            self.model.requires_safety_checker = False
 
             print("Model loaded successfully")
         except Exception as e:
@@ -87,7 +99,9 @@ class Service:
         mask = Image.open(io.BytesIO(mask)).convert("RGB")
 
         original_width, original_height = image.size
-        gen_width, gen_height = get_dimensions_divisible_by_8(original_width, original_height)
+        gen_width, gen_height = get_dimensions_divisible_by_8(
+            original_width, original_height
+        )
 
         if (gen_width, gen_height) != (original_width, original_height):
             image = image.resize((gen_width, gen_height))
@@ -221,13 +235,23 @@ def main() -> None:
         type=str,
         help="Custom checkpoint model to use while keeping VAE, UNet from base model",
     )
+    parser.add_argument(
+        "--cache-dir",
+        type=str,
+        default="../../model-cache",
+        help="Model cache directory",
+    )
 
     args = parser.parse_args()
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    service = Service(port=args.port, custom_checkpoint=args.custom_checkpoint)
+    service = Service(
+        cache_dir=args.cache_dir,
+        port=args.port,
+        custom_checkpoint=args.custom_checkpoint,
+    )
 
     try:
         service.start()

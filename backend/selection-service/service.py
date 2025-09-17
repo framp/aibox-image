@@ -32,8 +32,9 @@ GD_TEXT_THRESHOLD = 0.15
 
 
 class Service:
-    def __init__(self, port: int = 5557):
+    def __init__(self, cache_dir: Path, port: int = 5557):
         self.port = port
+        self.cache_dir = cache_dir
         self.context = zmq.Context()
         self.socket = None
         self.running = False
@@ -45,15 +46,21 @@ class Service:
     def _init_models(self):
         try:
             print(f"Loading Grounding DINO {GROUNDING_DINO_MODEL} on {DEVICE}...")
-            self.gd_processor = AutoProcessor.from_pretrained(GROUNDING_DINO_MODEL)
+            self.gd_processor = AutoProcessor.from_pretrained(
+                GROUNDING_DINO_MODEL, cache_dir=self.cache_dir
+            )
             self.gd_model = AutoModelForZeroShotObjectDetection.from_pretrained(
-                GROUNDING_DINO_MODEL
+                GROUNDING_DINO_MODEL, cache_dir=self.cache_dir
             ).to(DEVICE)
             print("Grounding DINO loaded successfully")
 
             print(f"Loading SAM2 {SAM_MODEL} on {DEVICE}...")
-            self.sam_processor = Sam2Processor.from_pretrained(SAM_MODEL)
-            self.sam_model = Sam2Model.from_pretrained(SAM_MODEL).to(DEVICE)
+            self.sam_processor = Sam2Processor.from_pretrained(
+                SAM_MODEL, cache_dir=self.cache_dir
+            )
+            self.sam_model = Sam2Model.from_pretrained(
+                SAM_MODEL, cache_dir=self.cache_dir
+            ).to(DEVICE)
             print("SAM2 loaded successfully")
 
         except Exception as e:
@@ -144,7 +151,9 @@ class Service:
                     threshold = request.get("threshold", 0.25)
 
                     try:
-                        selections = self.image_selection(prompt, image_bytes, threshold)
+                        selections = self.image_selection(
+                            prompt, image_bytes, threshold
+                        )
 
                         response = {"status": "success", "masks": selections}
                         print(f"Extracted {len(selections)} selections from image")
@@ -235,13 +244,19 @@ def main():
         help="Port to bind the service (default: 5558)",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument(
+        "--cache-dir",
+        type=str,
+        default="../../model-cache",
+        help="Model cache directory",
+    )
 
     args = parser.parse_args()
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    service = Service(port=args.port)
+    service = Service(cache_dir=args.cache_dir, port=args.port)
 
     try:
         service.start()
