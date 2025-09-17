@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Inpaint/outpaint service"
 requires-python = ">=3.9,<3.12"
 dependencies = [
+    "aibox-image-lib",
     "pyzmq>=25.0.0",
     "msgpack>=1.0.0",
     "zmq>=0.0.0",
@@ -21,6 +22,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0.0", "black>=23.0.0"]
+
+[tool.uv.sources]
+aibox-image-lib = { path = "../aibox-image-lib", editable = true }
 
 [project.scripts]
 service = "service:main"

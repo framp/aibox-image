@@ -2,14 +2,19 @@ import argparse
 import signal
 import sys
 import time
+import traceback
 from pathlib import Path
+from typing import List
 
 import cv2
 import msgpack
 import numpy as np
 import torch
 import zmq
+from aibox_image_lib.transport import BaseRequest, BaseResponse, Transport
+from aibox_image_lib.transport.zmq import ZmqTransport
 from PIL import Image
+from pydantic import BaseModel
 from transformers import (
     AutoModelForZeroShotObjectDetection,
     AutoProcessor,
@@ -31,14 +36,20 @@ GD_THRESHOLD = 0.25
 GD_TEXT_THRESHOLD = 0.15
 
 
-class Service:
-    def __init__(self, cache_dir: Path, port: int = 5557):
-        self.port = port
-        self.cache_dir = cache_dir
-        self.context = zmq.Context()
-        self.socket = None
-        self.running = False
+class ImageSelectionRequest(BaseRequest):
+    prompt: str
+    image_bytes: bytes
+    threshold: float = 0.25
 
+
+class ImageSelectionResponse(BaseResponse):
+    status: str
+    masks: List[bytes]
+
+
+class Service:
+    def __init__(self, cache_dir: Path):
+        self.cache_dir = cache_dir
         self.supported_formats = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
 
         self._init_models()
@@ -129,106 +140,6 @@ class Service:
 
         return masks_bytes
 
-    def start(self):
-        print(f"Starting Selection Service on port {self.port}")
-
-        self.socket = self.context.socket(zmq.REP)
-        self.socket.bind(f"tcp://*:{self.port}")
-        self.running = True
-
-        print("Selection Service ready! Waiting for requests...")
-
-        while self.running:
-            try:
-                message = self.socket.recv()
-                request = msgpack.unpackb(message, raw=False)
-
-                print(f"Received request: {request.get('action', 'unknown')}")
-
-                if request.get("action") == "image_selection":
-                    prompt = request.get("prompt")
-                    image_bytes = request.get("image_bytes")
-                    threshold = request.get("threshold", 0.25)
-
-                    try:
-                        selections = self.image_selection(
-                            prompt, image_bytes, threshold
-                        )
-
-                        response = {"status": "success", "masks": selections}
-                        print(f"Extracted {len(selections)} selections from image")
-                    except Exception as e:
-                        response = {"status": "error", "message": str(e)}
-                        print(f"Error processing request: {e}")
-
-                elif request.get("action") == "health":
-                    try:
-                        gd_device = (
-                            str(self.gd_model.device)
-                            if self.gd_model
-                            else "unavailable"
-                        )
-                    except:
-                        gd_device = "unavailable"
-
-                    try:
-                        sam_device = (
-                            str(self.sam_model.device)
-                            if self.sam_model
-                            else "unavailable"
-                        )
-                    except:
-                        sam_device = "unavailable"
-
-                    response = {
-                        "status": "healthy",
-                        "service": "llm",
-                        "sam_model": SAM_MODEL,
-                        "sam_device": sam_device,
-                        "gd_model": GROUNDING_DINO_MODEL,
-                        "gd_device": gd_device,
-                        "timestamp": time.time(),
-                    }
-
-                elif request.get("action") == "shutdown":
-                    response = {
-                        "status": "shutting_down",
-                        "message": "Selection Service shutting down",
-                    }
-                    self.running = False
-
-                else:
-                    response = {
-                        "status": "error",
-                        "message": f"Unknown action: {request.get('action')}",
-                    }
-
-                self.socket.send(msgpack.packb(response, use_bin_type=True))
-
-            except KeyboardInterrupt:
-                print("\nReceived interrupt signal")
-                break
-            except Exception as e:
-                print(f"Error processing request: {e}")
-                try:
-                    error_response = {
-                        "status": "error",
-                        "message": f"Service error: {str(e)}",
-                    }
-                    self.socket.send(msgpack.packb(error_response, use_bin_type=True))
-                except:
-                    pass
-
-        self.stop()
-
-    def stop(self):
-        print("Stopping Selection Service...")
-        self.running = False
-        if self.socket:
-            self.socket.close()
-        self.context.term()
-        print("Selection Service stopped")
-
 
 def signal_handler(sig, frame):
     print("\nReceived shutdown signal")
@@ -256,16 +167,25 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    service = Service(cache_dir=args.cache_dir, port=args.port)
+    transport = ZmqTransport()
+    service = Service(cache_dir=args.cache_dir)
+
+    @transport.handler("image_selection")
+    def image_selection(request: ImageSelectionRequest):
+        masks = service.image_selection(
+            request.prompt, request.image_bytes, request.threshold
+        )
+        return ImageSelectionResponse(status="success", masks=masks)
 
     try:
-        service.start()
+        transport.start(port=args.port)
     except KeyboardInterrupt:
         print("\nShutdown requested")
     except Exception as e:
         print(f"Service error: {e}")
+        print(traceback.format_exc())
     finally:
-        service.stop()
+        transport.stop()
 
 
 if __name__ == "__main__":
