@@ -4,6 +4,7 @@
 use eframe::egui;
 
 mod ai_tools;
+mod config;
 mod image_canvas;
 
 use ai_tools::ToolsPanel;
@@ -11,6 +12,8 @@ use image_canvas::ImageCanvas;
 
 fn main() -> eframe::Result {
     env_logger::init();
+
+    let config = config::load().expect("Failed to load config");
 
     let options: eframe::NativeOptions = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -25,7 +28,7 @@ fn main() -> eframe::Result {
         options,
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
-            Ok(Box::<ImageEditorApp>::default())
+            Ok(Box::new(ImageEditorApp::new(&config)))
         }),
     )
 }
@@ -36,10 +39,10 @@ struct ImageEditorApp {
     error_message: Option<String>,
 }
 
-impl Default for ImageEditorApp {
-    fn default() -> Self {
+impl ImageEditorApp {
+    fn new(config: &config::Config) -> Self {
         let canvas = ImageCanvas::default();
-        let tools_panel = ToolsPanel::new();
+        let tools_panel = ToolsPanel::new(&config);
 
         Self {
             image_canvas: canvas,
@@ -47,9 +50,7 @@ impl Default for ImageEditorApp {
             error_message: None,
         }
     }
-}
 
-impl ImageEditorApp {
     fn load_image(&mut self, file_path: std::path::PathBuf, ctx: &egui::Context) {
         match self.image_canvas.load_image(file_path.clone(), ctx) {
             Ok(()) => {

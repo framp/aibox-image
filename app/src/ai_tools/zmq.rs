@@ -4,6 +4,15 @@ use rmp_serde::Serializer;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_bytes::ByteBuf;
 
+use crate::config::{InpaintingModel, SelectionModel};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ModelKind {
+    Selection(SelectionModel),
+    Inpainting(InpaintingModel),
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Request {
@@ -17,28 +26,22 @@ pub enum Request {
         image_bytes: ByteBuf,
         mask: ByteBuf,
     },
-    HealthCheck,
-    Shutdown,
+    Health,
+    Load {
+        #[serde(flatten)]
+        model: ModelKind,
+        cache_dir: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum Response<T> {
     Success(T),
-    Error {
-        message: String,
-    },
-    Healthy {
-        service: String,
-        sam_model: String,
-        sam_device: String,
-        gd_model: String,
-        gd_device: String,
-        timestamp: f64,
-    },
-    ShuttingDown {
-        message: String,
-    },
+    Error { message: String },
+    Healthy,
+    Unhealthy,
+    ShuttingDown { message: String },
 }
 
 #[derive(Serialize, Deserialize, Debug)]

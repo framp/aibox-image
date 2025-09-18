@@ -1,0 +1,14 @@
+[models]
+cache_dir = "./models"
+
+[[models.selection]]
+name = "Grounding DINO + SAM 2"
+type = "grounding_dino_sam"
+grounding_dino_model = "IDEA-Research/grounding-dino-base"
+sam_model = "facebook/sam2.1-hiera-large"
+
+[[models.inpainting]]
+name = "Stable diffusion 1.5"
+type = "stable_diffusion"
+model = "CompVis/stable-diffusion-1-5"
+# checkpoint = ""
