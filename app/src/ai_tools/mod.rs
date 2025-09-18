@@ -1,6 +1,6 @@
 use eframe::egui::Ui;
 
-use crate::image_canvas::ImageCanvas;
+use crate::{config::Config, image_canvas::ImageCanvas};
 
 mod inpaint;
 mod selection;
@@ -16,10 +16,10 @@ pub struct ToolsPanel {
 }
 
 impl ToolsPanel {
-    pub fn new() -> Self {
+    pub fn new(config: &Config) -> Self {
         let mut tools = Vec::new();
 
-        tools.push(Box::new(selection::SelectionTool::new()) as Box<dyn Tool>);
+        tools.push(Box::new(selection::SelectionTool::new(&config)) as Box<dyn Tool>);
         tools.push(Box::new(inpaint::InpaintTool::new()) as Box<dyn Tool>);
 
         Self { tools }

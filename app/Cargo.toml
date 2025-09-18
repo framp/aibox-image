@@ -20,6 +20,10 @@ env_logger = { version = "0.10", default-features = false, features = [
     "humantime",
 ] }
 
+config = { version = "0.15.16", default-features = false, features = [
+    "toml",
+    "convert-case",
+] }
 zmq = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 rmp-serde = "1.2"

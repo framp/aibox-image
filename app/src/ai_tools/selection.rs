@@ -1,8 +1,12 @@
+use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use eframe::egui::{Button, Checkbox, CollapsingHeader, DragValue, Image, Slider, TextEdit, Ui};
+use eframe::egui::{
+    Button, Checkbox, CollapsingHeader, ComboBox, DragValue, Image, Slider, TextEdit, Ui,
+};
 use image::{DynamicImage, GrayImage, Luma};
 
+use crate::config::{Config, ModelEntry, SelectionModel};
 use crate::image_canvas::{ImageCanvas, Selection};
 
 use super::zmq;
@@ -13,19 +17,53 @@ pub struct SelectionTool {
     loading: bool,
     tx: Sender<Vec<GrayImage>>,
     rx: Receiver<Vec<GrayImage>>,
+    config: Config,
+    selected_model_id: Option<usize>,
 }
 
 impl SelectionTool {
-    pub fn new() -> Self {
+    pub fn new(config: &Config) -> Self {
         let (tx, rx) = mpsc::channel();
 
-        Self {
+        let mut tool = Self {
             input: String::new(),
             threshold: 0.5,
             loading: false,
             tx,
             rx,
+            config: config.clone(),
+            selected_model_id: None,
+        };
+
+        if let Some((id, first_model)) = tool.config.models.selection.iter().enumerate().next() {
+            tool.selected_model_id = Some(id);
+            // load the first model immediately
+            let cache_dir = tool.config.models.cache_dir.clone();
+            tool.load(&first_model.kind.clone(), &cache_dir);
         }
+
+        tool
+    }
+
+    fn load(&mut self, model: &SelectionModel, cache_dir: &PathBuf) {
+        self.loading = true;
+
+        let model = model.clone();
+        let cache_dir = cache_dir.to_str().unwrap().to_owned();
+        let tx = self.tx.clone();
+
+        std::thread::spawn(move || {
+            let response = zmq::request_response::<()>(
+                "tcp://127.0.0.1:5558",
+                zmq::Request::Load {
+                    cache_dir,
+                    model: zmq::ModelKind::Selection(model),
+                },
+            )
+            .unwrap();
+
+            let _ = tx.send(Vec::new());
+        });
     }
 
     fn fetch(&mut self, canvas: &ImageCanvas) {
@@ -78,6 +116,34 @@ impl super::Tool for SelectionTool {
     fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
         ui.label("Selection Tool");
 
+        let mut clicked_model_id = None;
+        ComboBox::from_label("Model")
+            .selected_text(
+                self.selected_model_id
+                    .and_then(|i| self.config.models.selection.get(i))
+                    .map(|obj| obj.name.as_str())
+                    .unwrap_or("Select..."),
+            )
+            .show_ui(ui, |ui| {
+                for (id, obj) in self.config.models.selection.iter().enumerate() {
+                    if ui
+                        .selectable_label(self.selected_model_id == Some(id), &obj.name)
+                        .clicked()
+                    {
+                        clicked_model_id = Some(id);
+                    }
+                }
+            });
+
+        if let Some(id) = clicked_model_id {
+            self.selected_model_id = Some(id);
+
+            let model_kind = &self.config.models.selection[id].kind.clone();
+            let cache_dir = self.config.models.cache_dir.clone();
+
+            self.load(model_kind, &cache_dir);
+        }
+
         let text_edit_response = ui.add(TextEdit::singleline(&mut self.input));
 
         ui.horizontal(|ui| {
@@ -85,7 +151,8 @@ impl super::Tool for SelectionTool {
             ui.add(Slider::new(&mut self.threshold, 0.0..=1.0).step_by(0.01));
         });
 
-        let can_submit = canvas.image_data.is_some() && !self.loading;
+        let can_submit =
+            canvas.image_data.is_some() && self.selected_model_id.is_some() && !self.loading;
 
         let submit = ui.add_enabled(can_submit, Button::new("Submit"));
         let should_submit = submit.clicked()
