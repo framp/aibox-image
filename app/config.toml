@@ -10,5 +10,4 @@ sam_model = "facebook/sam2.1-hiera-large"
 [[models.inpainting]]
 name = "Stable diffusion 1.5"
 type = "stable_diffusion"
-model = "CompVis/stable-diffusion-1-5"
-# checkpoint = ""
+model_or_checkpoint = "stable-diffusion-v1-5/stable-diffusion-inpainting"

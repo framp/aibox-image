@@ -20,7 +20,7 @@ impl ToolsPanel {
         let mut tools = Vec::new();
 
         tools.push(Box::new(selection::SelectionTool::new(&config)) as Box<dyn Tool>);
-        tools.push(Box::new(inpaint::InpaintTool::new()) as Box<dyn Tool>);
+        tools.push(Box::new(inpaint::InpaintTool::new(&config)) as Box<dyn Tool>);
 
         Self { tools }
     }
