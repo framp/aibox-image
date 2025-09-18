@@ -2,7 +2,6 @@ import argparse
 import logging
 import signal
 import sys
-from pathlib import Path
 
 from aibox_image_lib.transport.zmq import ZmqTransport
 
@@ -24,17 +23,6 @@ def main():
         help="Port to bind the service (default: 5559)",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    parser.add_argument(
-        "--custom-checkpoint",
-        type=str,
-        help="Custom checkpoint model to use while keeping VAE, UNet from base model",
-    )
-    parser.add_argument(
-        "--cache-dir",
-        type=Path,
-        default="../../model-cache",
-        help="Directory to store cache files",
-    )
 
     args = parser.parse_args()
 
@@ -44,9 +32,7 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
 
     transport = ZmqTransport()
-    service = Service(
-        cache_dir=args.cache_dir, custom_checkpoint=args.custom_checkpoint
-    )
+    service = Service()
     register_use_cases(transport, service)
 
     try:

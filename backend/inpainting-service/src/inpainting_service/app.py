@@ -1,9 +1,22 @@
 import io
+from typing import Literal
 
 from aibox_image_lib.transport import BaseRequest, BaseResponse, Transport
 from PIL import Image
 
-from inpainting_service.service import Service
+from inpainting_service.service import LoadParams, Service
+
+
+class LoadRequest(BaseRequest, LoadParams):
+    pass
+
+
+class LoadResponse(BaseResponse):
+    status: str
+
+
+class HealthResponse(BaseResponse):
+    status: Literal["healthy", "unhealthy"]
 
 
 class InpaintRequest(BaseRequest):
@@ -18,6 +31,16 @@ class InpaintResponse(BaseResponse):
 
 
 def register_use_cases(transport: Transport, service: Service):
+    @transport.handler()
+    def load(request: LoadRequest):
+        service.load(params=request)
+        return LoadResponse(status="success")
+
+    @transport.handler()
+    def health(_: BaseRequest):
+        healthy = service.health()
+        return HealthResponse(status="healthy" if healthy else "unhealthy")
+
     @transport.handler("inpaint")
     def inpaint(request: InpaintRequest):
         image = Image.open(io.BytesIO(request.image_bytes)).convert("RGB")

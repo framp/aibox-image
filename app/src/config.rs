@@ -37,10 +37,7 @@ pub enum SelectionModel {
 #[serde(tag = "type")]
 pub enum InpaintingModel {
     #[serde(rename = "stable_diffusion")]
-    StableDiffusion {
-        model: String,
-        checkpoint: Option<String>,
-    },
+    StableDiffusion { model_or_checkpoint: String },
 }
 
 pub fn load() -> Result<Config, Box<dyn std::error::Error>> {

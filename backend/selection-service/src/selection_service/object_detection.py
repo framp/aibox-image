@@ -32,24 +32,20 @@ class ObjectDetector(Protocol):
 
 class GroundingDINOSAM(ObjectDetector):
     def __init__(self, cache_dir: Path, gd_model: str, sam_model: str):
-        self.cache_dir = cache_dir
-
         logging.info(f"Loading Grounding DINO {gd_model} on {DEVICE}...")
-        self.gd_processor = AutoProcessor.from_pretrained(
-            gd_model, cache_dir=self.cache_dir
-        )
+        self.gd_processor = AutoProcessor.from_pretrained(gd_model, cache_dir=cache_dir)
         self.gd_model = AutoModelForZeroShotObjectDetection.from_pretrained(
-            gd_model, cache_dir=self.cache_dir
+            gd_model, cache_dir=cache_dir
         ).to(DEVICE)
         logging.info("Grounding DINO loaded successfully")
 
         logging.info(f"Loading SAM2 {sam_model} on {DEVICE}...")
         self.sam_processor = Sam2Processor.from_pretrained(
-            sam_model, cache_dir=self.cache_dir
+            sam_model, cache_dir=cache_dir
         )
-        self.sam_model = Sam2Model.from_pretrained(
-            sam_model, cache_dir=self.cache_dir
-        ).to(DEVICE)
+        self.sam_model = Sam2Model.from_pretrained(sam_model, cache_dir=cache_dir).to(
+            DEVICE
+        )
         logging.info("SAM2 loaded successfully")
 
     def image_selection(self, prompt: str, image: Image.Image, threshold: float):
