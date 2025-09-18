@@ -6,8 +6,8 @@ from pathlib import Path
 
 from aibox_image_lib.transport.zmq import ZmqTransport
 
-from selection_service.app import register_use_cases
-from selection_service.service import Service
+from inpainting_service.app import register_use_cases
+from inpainting_service.service import Service
 
 
 def signal_handler(sig, frame):
@@ -16,14 +16,19 @@ def signal_handler(sig, frame):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="LLM Text Processing Service")
+    parser = argparse.ArgumentParser(description="Inpainting Service")
     parser.add_argument(
         "--port",
         type=int,
-        default=5558,
-        help="Port to bind the service (default: 5558)",
+        default=5559,
+        help="Port to bind the service (default: 5559)",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument(
+        "--custom-checkpoint",
+        type=str,
+        help="Custom checkpoint model to use while keeping VAE, UNet from base model",
+    )
     parser.add_argument(
         "--cache-dir",
         type=Path,
@@ -39,7 +44,9 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
 
     transport = ZmqTransport()
-    service = Service(cache_dir=args.cache_dir)
+    service = Service(
+        cache_dir=args.cache_dir, custom_checkpoint=args.custom_checkpoint
+    )
     register_use_cases(transport, service)
 
     try:

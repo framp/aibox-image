@@ -1,9 +1,7 @@
 import io
-from typing import List
 
 from aibox_image_lib.transport import BaseRequest, BaseResponse, Transport
 from PIL import Image
-from pydantic import BaseModel
 
 from selection_service.service import Service
 
@@ -16,7 +14,7 @@ class ImageSelectionRequest(BaseRequest):
 
 class ImageSelectionResponse(BaseResponse):
     status: str
-    masks: List[bytes]
+    masks: list[bytes]
 
 
 def register_use_cases(transport: Transport, service: Service):

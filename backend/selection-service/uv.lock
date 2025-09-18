@@ -1184,13 +1184,11 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "aibox-image-lib" },
-    { name = "msgpack" },
     { name = "numpy", version = "2.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
     { name = "numpy", version = "2.3.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "opencv-python" },
     { name = "pillow" },
-    { name = "pyzmq" },
     { name = "torch" },
     { name = "torchvision" },
     { name = "transformers" },
@@ -1207,12 +1205,10 @@ dev = [
 requires-dist = [
     { name = "aibox-image-lib", editable = "../aibox-image-lib" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
-    { name = "msgpack", specifier = ">=1.0.0" },
     { name = "numpy", specifier = ">=2.0.2" },
     { name = "opencv-python", specifier = ">=4.11.0.86" },
     { name = "pillow", specifier = ">=11.3.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
-    { name = "pyzmq", specifier = ">=25.0.0" },
     { name = "torch", specifier = ">=2.8.0" },
     { name = "torchvision", specifier = ">=0.23.0" },
     { name = "transformers", specifier = ">=4.56.1" },
