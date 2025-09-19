@@ -1,114 +1,45 @@
-use std::path::PathBuf;
-use std::sync::mpsc::{self, Receiver, Sender};
-
 use eframe::egui::{
     Button, Checkbox, CollapsingHeader, ComboBox, DragValue, Image, Slider, TextEdit, Ui,
 };
-use image::{DynamicImage, GrayImage, Luma};
+use image::{GrayImage, Luma};
 
-use crate::config::{Config, ModelEntry, SelectionModel};
-use crate::image_canvas::{ImageCanvas, Selection};
+use crate::{
+    config::Config,
+    image_canvas::{ImageCanvas, Selection},
+};
 
-use super::zmq;
+mod worker;
 
 pub struct SelectionTool {
     input: String,
     threshold: f32,
     loading: bool,
-    tx: Sender<Vec<GrayImage>>,
-    rx: Receiver<Vec<GrayImage>>,
+    worker: worker::Worker,
     config: Config,
     selected_model_id: Option<usize>,
 }
 
 impl SelectionTool {
     pub fn new(config: &Config) -> Self {
-        let (tx, rx) = mpsc::channel();
-
         let mut tool = Self {
             input: String::new(),
             threshold: 0.5,
             loading: false,
-            tx,
-            rx,
+            worker: worker::Worker::new(),
             config: config.clone(),
             selected_model_id: None,
         };
 
         if let Some((id, first_model)) = tool.config.models.selection.iter().enumerate().next() {
+            tool.loading = true;
+
             tool.selected_model_id = Some(id);
             // load the first model immediately
-            let cache_dir = tool.config.models.cache_dir.clone();
-            tool.load(&first_model.kind.clone(), &cache_dir);
+            tool.worker
+                .load(first_model.kind.clone(), &tool.config.models.cache_dir);
         }
 
         tool
-    }
-
-    fn load(&mut self, model: &SelectionModel, cache_dir: &PathBuf) {
-        self.loading = true;
-
-        let model = model.clone();
-        let cache_dir = cache_dir.to_str().unwrap().to_owned();
-        let tx = self.tx.clone();
-
-        std::thread::spawn(move || {
-            let response = zmq::request_response::<()>(
-                "tcp://127.0.0.1:5558",
-                zmq::Request::Load {
-                    cache_dir,
-                    model: zmq::ModelKind::Selection(model),
-                },
-            )
-            .unwrap();
-
-            let _ = tx.send(Vec::new());
-        });
-    }
-
-    fn fetch(&mut self, canvas: &ImageCanvas) {
-        self.loading = true;
-
-        let image_data = canvas.image_data.as_ref().unwrap();
-
-        let mut image_buf = Vec::new();
-        image_data
-            .write_to(
-                &mut std::io::Cursor::new(&mut image_buf),
-                image::ImageFormat::Png,
-            )
-            .unwrap();
-
-        let input = self.input.clone();
-        let threshold = self.threshold;
-        let tx = self.tx.clone();
-
-        std::thread::spawn(move || {
-            let response = zmq::request_response(
-                "tcp://127.0.0.1:5558",
-                zmq::Request::ImageSelection {
-                    prompt: input,
-                    image_bytes: serde_bytes::ByteBuf::from(image_buf),
-                    threshold,
-                },
-            )
-            .unwrap();
-
-            if let zmq::Response::Success(payload) = response {
-                if let zmq::ImageSelectionPayload { masks } = payload {
-                    let selections = masks
-                        .into_iter()
-                        .filter_map(|mask_bytes| {
-                            image::load_from_memory(&mask_bytes)
-                                .ok()
-                                .map(|img: DynamicImage| img.into_luma8())
-                        })
-                        .collect::<Vec<_>>();
-
-                    let _ = tx.send(selections);
-                }
-            }
-        });
     }
 }
 
@@ -141,7 +72,8 @@ impl super::Tool for SelectionTool {
             let model_kind = &self.config.models.selection[id].kind.clone();
             let cache_dir = self.config.models.cache_dir.clone();
 
-            self.load(model_kind, &cache_dir);
+            self.loading = true;
+            self.worker.load(model_kind.clone(), &cache_dir);
         }
 
         let text_edit_response = ui.add(TextEdit::singleline(&mut self.input));
@@ -160,7 +92,12 @@ impl super::Tool for SelectionTool {
                 && ui.input(|i| i.key_pressed(eframe::egui::Key::Enter)));
 
         if should_submit && can_submit {
-            self.fetch(canvas);
+            self.loading = true;
+            self.worker.image_selection(
+                canvas.image_data.as_ref().unwrap(),
+                &self.input,
+                self.threshold,
+            );
         }
 
         let clear = ui.add(Button::new("Clear"));
@@ -181,7 +118,11 @@ impl super::Tool for SelectionTool {
             ui.spinner();
         }
 
-        if let Ok(selections) = self.rx.try_recv() {
+        if self.worker.loaded() {
+            self.loading = false;
+        }
+
+        if let Some(selections) = self.worker.selected() {
             self.loading = false;
             canvas.selections = selections
                 .into_iter()

@@ -4,7 +4,7 @@ use crate::{config::Config, image_canvas::ImageCanvas};
 
 mod inpaint;
 mod selection;
-mod zmq;
+mod transport;
 
 pub trait Tool {
     fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas);
