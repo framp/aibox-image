@@ -34,7 +34,7 @@ def register_use_cases(transport: Transport, service: Service):
     @transport.handler()
     def load(request: LoadRequest):
         service.load(params=request)
-        return LoadResponse(status="success")
+        return BaseResponse()
 
     @transport.handler()
     def health(_: BaseRequest):

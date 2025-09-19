@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use config::{Config as ConfigTrait, File, FileFormat};
 use serde::{Deserialize, Deserializer, Serialize, de};
