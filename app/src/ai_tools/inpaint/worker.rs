@@ -1,8 +1,6 @@
 use std::{io::Cursor, path::PathBuf};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
-use anyhow::Context;
-
 use image::{DynamicImage, GrayImage, Luma};
 use serde_bytes::ByteBuf;
 
@@ -73,8 +71,7 @@ impl Worker {
                 })
                 .await?;
 
-            let inpainted_image = image::load_from_memory(&response.image)
-                .context("Failed to load inpainted image from memory")?;
+            let inpainted_image = image::load_from_memory(&response.image)?;
 
             Ok(inpainted_image)
         });

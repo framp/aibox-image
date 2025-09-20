@@ -1,6 +1,7 @@
-use anyhow::Result;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::Sender;
+
+use crate::ai_tools::error::WorkerError;
 
 pub trait WorkerTrait {
     fn active_jobs(&self) -> Arc<Mutex<usize>>;
@@ -15,7 +16,7 @@ pub trait WorkerTrait {
     where
         T: Send + 'static,
         F: FnOnce() -> Fut + Send + 'static,
-        Fut: std::future::Future<Output = Result<T>> + Send + 'static,
+        Fut: std::future::Future<Output = Result<T, WorkerError>> + Send + 'static,
     {
         let jobs = self.active_jobs();
 

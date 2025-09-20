@@ -1,11 +1,10 @@
-use anyhow::{Context, Result};
 use futures::compat::Future01CompatExt;
 use rmp_serde::Serializer;
 use serde::{Serialize, de::DeserializeOwned};
 use std::sync::Arc;
 use tokio_zmq::{Multipart, Req, prelude::*};
 
-use super::{IntoResponse, Transport, types::Request};
+use super::{IntoResponse, Transport, TransportError, types::Request};
 
 #[derive(Clone)]
 pub struct ZmqTransport {
@@ -21,7 +20,7 @@ impl ZmqTransport {
 }
 
 impl Transport for ZmqTransport {
-    async fn send<ReqType>(&self, req: ReqType) -> Result<ReqType::Response>
+    async fn send<ReqType>(&self, req: ReqType) -> Result<ReqType::Response, TransportError>
     where
         ReqType: IntoResponse + Serialize + Into<Request> + Send,
         ReqType::Response: DeserializeOwned,
@@ -36,38 +35,44 @@ impl Transport for ZmqTransport {
         // Serialize the request
         let mut buf = Vec::new();
         let request = Request::from(req.into());
-        request
-            .serialize(&mut Serializer::new(&mut buf).with_struct_map())
-            .context("Failed to serialize request")?;
+        request.serialize(&mut Serializer::new(&mut buf).with_struct_map())?;
 
         // Convert futures 0.1 to std::future using compat layer
-        let socket = socket_future
-            .compat()
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to build ZMQ socket: {}", e))?;
+        let socket =
+            socket_future
+                .compat()
+                .await
+                .map_err(|e| TransportError::SocketBuildError {
+                    message: e.to_string(),
+                })?;
 
         // Create multipart message
         let multipart = Multipart::from(vec![zmq::Message::from(&buf[..])]);
 
         // Send and receive using futures 0.1 -> std::future compat
-        let socket = socket
-            .send(multipart)
-            .compat()
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to send ZMQ message: {}", e))?;
-        let (response_multipart, _socket) = socket
-            .recv()
-            .compat()
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to receive ZMQ response: {}", e))?;
+        let socket =
+            socket
+                .send(multipart)
+                .compat()
+                .await
+                .map_err(|e| TransportError::SendError {
+                    message: e.to_string(),
+                })?;
+        let (response_multipart, _socket) =
+            socket
+                .recv()
+                .compat()
+                .await
+                .map_err(|e| TransportError::ReceiveError {
+                    message: e.to_string(),
+                })?;
 
         // Extract the response data
         let raw_data = response_multipart
             .get(0)
-            .context("Empty response multipart")?
+            .ok_or(TransportError::EmptyResponse)?
             .to_vec();
-        let decoded = rmp_serde::from_slice::<ReqType::Response>(&raw_data)
-            .context("Failed to deserialize response")?;
+        let decoded = rmp_serde::from_slice::<ReqType::Response>(&raw_data)?;
 
         Ok(decoded)
     }

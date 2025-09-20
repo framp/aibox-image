@@ -4,13 +4,13 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 use image::{DynamicImage, GrayImage};
 use serde_bytes::ByteBuf;
 
-use crate::config::{ModelEntry, SelectionModel};
 use crate::{
     ai_tools::transport::{
         Transport,
         types::{ImageSelectionRequest, LoadRequest, ModelKind},
         zmq::ZmqTransport,
     },
+    config::{ModelEntry, SelectionModel},
     worker::WorkerTrait,
 };
 
