@@ -6,6 +6,7 @@ use image::{GrayImage, Luma};
 use crate::{
     config::Config,
     image_canvas::{ImageCanvas, Selection},
+    worker::WorkerTrait,
 };
 
 mod worker;
@@ -13,10 +14,9 @@ mod worker;
 pub struct SelectionTool {
     input: String,
     threshold: f32,
-    loading: bool,
     worker: worker::Worker,
     config: Config,
-    selected_model_id: Option<usize>,
+    selected_model: Option<String>,
 }
 
 impl SelectionTool {
@@ -24,19 +24,15 @@ impl SelectionTool {
         let mut tool = Self {
             input: String::new(),
             threshold: 0.5,
-            loading: false,
             worker: worker::Worker::new(),
             config: config.clone(),
-            selected_model_id: None,
+            selected_model: None,
         };
 
         if let Some((id, first_model)) = tool.config.models.selection.iter().enumerate().next() {
-            tool.loading = true;
-
-            tool.selected_model_id = Some(id);
             // load the first model immediately
             tool.worker
-                .load(first_model.kind.clone(), &tool.config.models.cache_dir);
+                .load_model(&first_model, &tool.config.models.cache_dir);
         }
 
         tool
@@ -47,18 +43,10 @@ impl SelectionTool {
 
         ui.add_enabled_ui(enabled, |ui| {
             ComboBox::from_label("Model")
-                .selected_text(
-                    self.selected_model_id
-                        .and_then(|i| self.config.models.selection.get(i))
-                        .map(|obj| obj.name.as_str())
-                        .unwrap_or("Select..."),
-                )
+                .selected_text(self.selected_model.as_deref().unwrap_or("Select..."))
                 .show_ui(ui, |ui| {
                     for (id, obj) in self.config.models.selection.iter().enumerate() {
-                        if ui
-                            .selectable_label(self.selected_model_id == Some(id), &obj.name)
-                            .clicked()
-                        {
+                        if ui.selectable_label(false, &obj.name).clicked() {
                             clicked_model_id = Some(id);
                         }
                     }
@@ -66,17 +54,14 @@ impl SelectionTool {
         });
 
         if let Some(id) = clicked_model_id {
-            self.selected_model_id = Some(id);
-
-            let model_kind = &self.config.models.selection[id].kind.clone();
-            let cache_dir = self.config.models.cache_dir.clone();
-
-            self.loading = true;
-            self.worker.load(model_kind.clone(), &cache_dir);
+            self.worker.load_model(
+                &self.config.models.selection[id],
+                &self.config.models.cache_dir,
+            );
         }
     }
 
-    fn ui_inpaint(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas, enabled: bool) {
+    fn ui_image_selection(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas, enabled: bool) {
         let text_edit_response = ui.add_enabled(enabled, TextEdit::singleline(&mut self.input));
         ui.horizontal(|ui| {
             ui.label("Threshold:");
@@ -92,7 +77,6 @@ impl SelectionTool {
                 && ui.input(|i| i.key_pressed(eframe::egui::Key::Enter)));
 
         if should_submit && enabled {
-            self.loading = true;
             self.worker.image_selection(
                 canvas.image_data.as_ref().unwrap(),
                 &self.input,
@@ -203,24 +187,24 @@ impl super::Tool for SelectionTool {
         ui.push_id("selection", |ui| {
             ui.label("Selection Tool");
 
-            let ui_enabled =
-                canvas.image_data.is_some() && self.selected_model_id.is_some() && !self.loading;
+            let ui_enabled = canvas.image_data.is_some()
+                && self.selected_model.is_some()
+                && !self.worker.is_processing();
 
             self.ui_model_selection(ui, ui_enabled);
 
-            if self.loading {
+            if self.worker.is_processing() {
                 ui.spinner();
             }
 
-            self.ui_inpaint(ui, canvas, ui_enabled);
+            self.ui_image_selection(ui, canvas, ui_enabled);
             self.ui_selections(ui, canvas, ui_enabled);
 
-            if self.worker.loaded() {
-                self.loading = false;
+            if let Some(model) = self.worker.model_loaded() {
+                self.selected_model = Some(model);
             }
 
-            if let Some(selections) = self.worker.selected() {
-                self.loading = false;
+            if let Some(selections) = self.worker.selections() {
                 canvas.selections = selections
                     .into_iter()
                     .enumerate()

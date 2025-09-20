@@ -1,38 +1,79 @@
 use eframe::egui::{Button, ComboBox, TextEdit, Ui};
 
-use crate::{config::Config, image_canvas::ImageCanvas};
+use crate::{config::Config, image_canvas::ImageCanvas, worker::WorkerTrait};
 
 mod worker;
 
 pub struct InpaintTool {
     input: String,
 
-    loading: bool,
     worker: worker::Worker,
 
     config: Config,
-    selected_model_id: Option<usize>,
+    selected_model: Option<String>,
 }
 
 impl InpaintTool {
     pub fn new(config: &Config) -> Self {
-        let mut tool = Self {
+        let tool = Self {
             input: String::new(),
-            loading: false,
             worker: worker::Worker::new(),
             config: config.clone(),
-            selected_model_id: None,
+            selected_model: None,
         };
 
-        if let Some((id, first_model)) = tool.config.models.inpainting.iter().enumerate().next() {
-            tool.loading = true;
-            tool.selected_model_id = Some(id);
+        if let Some(first_model) = tool.config.models.inpainting.iter().next() {
             // load the first model immediately
             tool.worker
-                .load(first_model.kind.clone(), &tool.config.models.cache_dir);
+                .load_model(first_model, &tool.config.models.cache_dir);
         }
 
         tool
+    }
+
+    fn ui_model_selection(&mut self, ui: &mut Ui, enabled: bool) {
+        let mut clicked_model_id = None;
+
+        ui.add_enabled_ui(enabled, |ui| {
+            ComboBox::from_label("Model")
+                .selected_text(self.selected_model.as_deref().unwrap_or("Select..."))
+                .show_ui(ui, |ui| {
+                    for (id, obj) in self.config.models.inpainting.iter().enumerate() {
+                        if ui.selectable_label(false, &obj.name).clicked() {
+                            clicked_model_id = Some(id);
+                        }
+                    }
+                });
+        });
+
+        if let Some(id) = clicked_model_id {
+            self.worker.load_model(
+                &self.config.models.inpainting[id],
+                &self.config.models.cache_dir,
+            );
+        }
+    }
+
+    fn ui_inpainting(&mut self, ui: &mut Ui, canvas: &ImageCanvas, enabled: bool) {
+        let text_edit_response = ui.add(TextEdit::singleline(&mut self.input));
+
+        let submit = ui.add_enabled(enabled, Button::new("Submit"));
+        let should_submit = submit.clicked()
+            || (text_edit_response.lost_focus()
+                && ui.input(|i| i.key_pressed(eframe::egui::Key::Enter)));
+
+        if should_submit && enabled {
+            self.worker.inpaint(
+                canvas.image_data.as_ref().unwrap(),
+                canvas
+                    .selections
+                    .iter()
+                    .filter(|s| s.visible)
+                    .map(|s| s.mask.clone())
+                    .collect(),
+                &self.input,
+            );
+        }
     }
 }
 
@@ -41,76 +82,28 @@ impl super::Tool for InpaintTool {
         ui.push_id("inpaint", |ui| {
             ui.label("Inpaint Tool");
 
-            let mut clicked_model_id = None;
-            ComboBox::from_label("Model")
-                .selected_text(
-                    self.selected_model_id
-                        .and_then(|i| self.config.models.inpainting.get(i))
-                        .map(|obj| obj.name.as_str())
-                        .unwrap_or("Select..."),
-                )
-                .show_ui(ui, |ui| {
-                    for (id, obj) in self.config.models.inpainting.iter().enumerate() {
-                        if ui
-                            .selectable_label(self.selected_model_id == Some(id), &obj.name)
-                            .clicked()
-                        {
-                            clicked_model_id = Some(id);
-                        }
-                    }
-                });
-
-            if let Some(id) = clicked_model_id {
-                self.loading = true;
-                self.selected_model_id = Some(id);
-
-                let model_kind = &self.config.models.inpainting[id].kind.clone();
-                let cache_dir = self.config.models.cache_dir.clone();
-
-                self.worker.load(model_kind.clone(), &cache_dir);
-            }
-
-            let text_edit_response = ui.add(TextEdit::singleline(&mut self.input));
-
             let has_visible_selections = canvas.selections.iter().any(|s| s.visible);
-            let can_submit = canvas.image_data.is_some()
+            let ui_enabled = canvas.image_data.is_some()
                 && has_visible_selections
-                && self.selected_model_id.is_some()
-                && !self.loading;
+                && self.selected_model.is_some()
+                && !self.worker.is_processing();
 
-            let submit = ui.add_enabled(can_submit, Button::new("Submit"));
-            let should_submit = submit.clicked()
-                || (text_edit_response.lost_focus()
-                    && ui.input(|i| i.key_pressed(eframe::egui::Key::Enter)));
+            self.ui_model_selection(ui, ui_enabled);
+            self.ui_inpainting(ui, canvas, ui_enabled);
 
-            if should_submit && can_submit {
-                self.loading = true;
-                self.worker.inpaint(
-                    canvas.image_data.as_ref().unwrap(),
-                    canvas
-                        .selections
-                        .iter()
-                        .filter(|s| s.visible)
-                        .map(|s| s.mask.clone())
-                        .collect(),
-                    &self.input,
-                );
-            }
-
-            if self.loading {
+            if self.worker.is_processing() {
                 ui.spinner();
             }
 
             if let Some(image) = self.worker.inpainted() {
-                self.loading = false;
                 canvas.set_image(image, ui.ctx());
                 for selection in &mut canvas.selections {
                     selection.visible = false;
                 }
             }
 
-            if self.worker.loaded() {
-                self.loading = false;
+            if let Some(model) = self.worker.model_loaded() {
+                self.selected_model = Some(model);
             }
         });
     }
