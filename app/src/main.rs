@@ -16,22 +16,28 @@ fn main() -> eframe::Result {
 
     let config = config::load().expect("Failed to load config");
 
-    let options: eframe::NativeOptions = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1200.0, 800.0])
-            .with_min_inner_size([800.0, 600.0])
-            .with_drag_and_drop(true),
-        ..Default::default()
-    };
+    // Create a Tokio runtime
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
 
-    eframe::run_native(
-        "AI Image Editor",
-        options,
-        Box::new(|cc| {
-            egui_extras::install_image_loaders(&cc.egui_ctx);
-            Ok(Box::new(ImageEditorApp::new(&config)))
-        }),
-    )
+    // Run the application inside the Tokio runtime
+    rt.block_on(async {
+        let options: eframe::NativeOptions = eframe::NativeOptions {
+            viewport: egui::ViewportBuilder::default()
+                .with_inner_size([1200.0, 800.0])
+                .with_min_inner_size([800.0, 600.0])
+                .with_drag_and_drop(true),
+            ..Default::default()
+        };
+
+        eframe::run_native(
+            "AI Image Editor",
+            options,
+            Box::new(|cc| {
+                egui_extras::install_image_loaders(&cc.egui_ctx);
+                Ok(Box::new(ImageEditorApp::new(&config)))
+            }),
+        )
+    })
 }
 
 struct ImageEditorApp {

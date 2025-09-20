@@ -1,8 +1,5 @@
-use std::{
-    io::Cursor,
-    path::PathBuf,
-    sync::mpsc::{self, Receiver, Sender},
-};
+use std::{io::Cursor, path::PathBuf};
+use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use image::{DynamicImage, GrayImage, Luma};
 use serde_bytes::ByteBuf;
@@ -34,8 +31,8 @@ impl WorkerTrait for Worker {
 
 impl Worker {
     pub fn new() -> Self {
-        let (tx_image, rx_image) = mpsc::channel();
-        let (tx_load, rx_load) = mpsc::channel();
+        let (tx_image, rx_image) = mpsc::channel(100);
+        let (tx_load, rx_load) = mpsc::channel(100);
 
         Self {
             transport: ZmqTransport::new("tcp://127.0.0.1:5559"),
@@ -52,7 +49,7 @@ impl Worker {
         let prompt = prompt.to_owned();
         let client = self.transport.clone();
 
-        self.run(self.tx_image.clone(), move || {
+        self.run(self.tx_image.clone(), move || async move {
             let mask = merge_masks(&masks);
             let mut mask_buf = Vec::new();
             mask.write_to(&mut Cursor::new(&mut mask_buf), image::ImageFormat::Png)
@@ -66,14 +63,19 @@ impl Worker {
                 )
                 .unwrap();
 
-            let response = client.send(InpaintRequest {
-                prompt: prompt,
-                image_bytes: ByteBuf::from(image_buf),
-                mask: ByteBuf::from(mask_buf),
-            })?;
+            let response = client
+                .send(InpaintRequest {
+                    prompt: prompt,
+                    image_bytes: ByteBuf::from(image_buf),
+                    mask: ByteBuf::from(mask_buf),
+                })
+                .await?;
 
-            let inpainted_image = image::load_from_memory(&response.image)
-                .map_err(|e| format!("Failed to load image from response: {}", e))?;
+            let inpainted_image = image::load_from_memory(&response.image).map_err(
+                |e| -> Box<dyn std::error::Error + Send + Sync> {
+                    Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+                },
+            )?;
 
             Ok(inpainted_image)
         });
@@ -84,21 +86,23 @@ impl Worker {
         let cache_dir = cache_dir.to_str().unwrap().to_owned();
         let model = model.clone();
 
-        self.run(self.tx_load.clone(), move || {
-            client.send(LoadRequest {
-                model: ModelKind::Inpainting(model.kind),
-                cache_dir,
-            })?;
+        self.run(self.tx_load.clone(), move || async move {
+            client
+                .send(LoadRequest {
+                    model: ModelKind::Inpainting(model.kind),
+                    cache_dir,
+                })
+                .await?;
 
             Ok(model.name)
         });
     }
 
-    pub fn inpainted(&self) -> Option<DynamicImage> {
+    pub fn inpainted(&mut self) -> Option<DynamicImage> {
         self.rx_image.try_recv().ok()
     }
 
-    pub fn model_loaded(&self) -> Option<String> {
+    pub fn model_loaded(&mut self) -> Option<String> {
         self.rx_load.try_recv().ok()
     }
 }

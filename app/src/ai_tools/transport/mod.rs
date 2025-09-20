@@ -4,9 +4,12 @@ pub mod types;
 pub mod zmq;
 
 pub trait Transport {
-    fn send<Req>(&self, req: Req) -> Result<Req::Response, Box<dyn std::error::Error>>
+    async fn send<Req>(
+        &self,
+        req: Req,
+    ) -> Result<Req::Response, Box<dyn std::error::Error + Send + Sync>>
     where
-        Req: IntoResponse + Serialize + Into<types::Request>,
+        Req: IntoResponse + Serialize + Into<types::Request> + Send,
         Req::Response: DeserializeOwned;
 }
 
