@@ -11,3 +11,8 @@ sam_model = "facebook/sam2.1-hiera-large"
 name = "Stable diffusion 1.5"
 type = "stable_diffusion"
 model_or_checkpoint = "stable-diffusion-v1-5/stable-diffusion-inpainting"
+
+[[models.upscaling]]
+name = "Stable diffusion x4"
+type = "stable_diffusion"
+model_or_checkpoint = "stabilityai/stable-diffusion-x4-upscaler"

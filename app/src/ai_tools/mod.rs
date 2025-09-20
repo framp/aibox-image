@@ -5,6 +5,7 @@ use crate::{config::Config, image_canvas::ImageCanvas};
 mod inpaint;
 mod selection;
 mod transport;
+mod upscale;
 
 pub trait Tool {
     fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas);
@@ -21,6 +22,7 @@ impl ToolsPanel {
 
         tools.push(Box::new(selection::SelectionTool::new(&config)) as Box<dyn Tool>);
         tools.push(Box::new(inpaint::InpaintTool::new(&config)) as Box<dyn Tool>);
+        tools.push(Box::new(upscale::UpscaleTool::new(&config)) as Box<dyn Tool>);
 
         Self { tools }
     }

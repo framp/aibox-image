@@ -2,13 +2,14 @@ use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 
 use super::IntoResponse;
-use crate::config::{InpaintingModel, SelectionModel};
+use crate::config::{InpaintingModel, SelectionModel, UpscalingModel};
 
 #[derive(Serialize, Debug)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Request {
     ImageSelection(ImageSelectionRequest),
     Inpaint(InpaintRequest),
+    Upscale(UpscaleRequest),
     Load(LoadRequest),
 }
 
@@ -59,10 +60,33 @@ pub struct InpaintResponse {
 }
 
 #[derive(Serialize, Debug)]
+pub struct UpscaleRequest {
+    pub prompt: String,
+    pub image_bytes: ByteBuf,
+}
+
+impl IntoResponse for UpscaleRequest {
+    type Response = UpscaleResponse;
+}
+
+impl Into<Request> for UpscaleRequest {
+    fn into(self) -> Request {
+        Request::Upscale(self)
+    }
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct UpscaleResponse {
+    pub image: ByteBuf,
+}
+
+#[derive(Serialize, Debug)]
 #[serde(untagged)]
 pub enum ModelKind {
     Selection(SelectionModel),
     Inpainting(InpaintingModel),
+    Upscaling(UpscalingModel),
 }
 
 #[derive(Serialize, Debug)]
