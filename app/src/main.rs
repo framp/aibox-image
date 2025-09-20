@@ -16,10 +16,8 @@ fn main() -> eframe::Result {
 
     let config = config::load().expect("Failed to load config");
 
-    // Create a Tokio runtime
     let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
 
-    // Run the application inside the Tokio runtime
     rt.block_on(async {
         let options: eframe::NativeOptions = eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()

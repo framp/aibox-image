@@ -27,17 +27,14 @@ impl Transport for ZmqTransport {
     {
         let context = Arc::new(zmq::Context::new());
 
-        // Build the socket using tokio-zmq's builder pattern
         let socket_future = Req::builder(Arc::clone(&context))
             .connect(&self.endpoint)
             .build();
 
-        // Serialize the request
         let mut buf = Vec::new();
         let request = Request::from(req.into());
         request.serialize(&mut Serializer::new(&mut buf).with_struct_map())?;
 
-        // Convert futures 0.1 to std::future using compat layer
         let socket =
             socket_future
                 .compat()
@@ -46,10 +43,8 @@ impl Transport for ZmqTransport {
                     message: e.to_string(),
                 })?;
 
-        // Create multipart message
         let multipart = Multipart::from(vec![zmq::Message::from(&buf[..])]);
 
-        // Send and receive using futures 0.1 -> std::future compat
         let socket =
             socket
                 .send(multipart)
@@ -67,7 +62,6 @@ impl Transport for ZmqTransport {
                     message: e.to_string(),
                 })?;
 
-        // Extract the response data
         let raw_data = response_multipart
             .get(0)
             .ok_or(TransportError::EmptyResponse)?
