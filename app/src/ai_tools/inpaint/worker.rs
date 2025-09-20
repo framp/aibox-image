@@ -13,15 +13,23 @@ use crate::{
         types::{InpaintRequest, LoadRequest, ModelKind},
         zmq::ZmqTransport,
     },
-    config::InpaintingModel,
+    config::{InpaintingModel, ModelEntry},
+    worker::WorkerTrait,
 };
 
 pub struct Worker {
     transport: ZmqTransport,
     tx_image: Sender<DynamicImage>,
     rx_image: Receiver<DynamicImage>,
-    tx_load: Sender<()>,
-    rx_load: Receiver<()>,
+    tx_load: Sender<String>,
+    rx_load: Receiver<String>,
+    active_jobs: std::sync::Arc<std::sync::Mutex<usize>>,
+}
+
+impl WorkerTrait for Worker {
+    fn active_jobs(&self) -> std::sync::Arc<std::sync::Mutex<usize>> {
+        self.active_jobs.clone()
+    }
 }
 
 impl Worker {
@@ -35,6 +43,7 @@ impl Worker {
             rx_image,
             tx_load,
             rx_load,
+            active_jobs: std::sync::Arc::new(std::sync::Mutex::new(0)),
         }
     }
 
@@ -43,7 +52,7 @@ impl Worker {
         let prompt = prompt.to_owned();
         let client = self.transport.clone();
 
-        crate::worker::run(self.tx_image.clone(), move || {
+        self.run(self.tx_image.clone(), move || {
             let mask = merge_masks(&masks);
             let mut mask_buf = Vec::new();
             mask.write_to(&mut Cursor::new(&mut mask_buf), image::ImageFormat::Png)
@@ -70,17 +79,18 @@ impl Worker {
         });
     }
 
-    pub fn load(&self, kind: InpaintingModel, cache_dir: &PathBuf) {
+    pub fn load_model(&self, model: &ModelEntry<InpaintingModel>, cache_dir: &PathBuf) {
         let client = self.transport.clone();
         let cache_dir = cache_dir.to_str().unwrap().to_owned();
+        let model = model.clone();
 
-        crate::worker::run(self.tx_load.clone(), move || {
+        self.run(self.tx_load.clone(), move || {
             client.send(LoadRequest {
-                model: ModelKind::Inpainting(kind),
+                model: ModelKind::Inpainting(model.kind),
                 cache_dir,
             })?;
 
-            Ok(())
+            Ok(model.name)
         });
     }
 
@@ -88,8 +98,8 @@ impl Worker {
         self.rx_image.try_recv().ok()
     }
 
-    pub fn loaded(&self) -> bool {
-        self.rx_load.try_recv().is_ok()
+    pub fn model_loaded(&self) -> Option<String> {
+        self.rx_load.try_recv().ok()
     }
 }
 
