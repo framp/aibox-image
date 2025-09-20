@@ -64,7 +64,7 @@ impl InpaintTool {
 
         if should_submit && enabled {
             self.worker.inpaint(
-                canvas.image_data.as_ref().unwrap(),
+                canvas.image.as_ref().unwrap().image(),
                 canvas
                     .selections
                     .iter()
@@ -83,7 +83,7 @@ impl super::Tool for InpaintTool {
             ui.label("Inpaint Tool");
 
             let has_visible_selections = canvas.selections.iter().any(|s| s.visible);
-            let ui_enabled = canvas.image_data.is_some()
+            let ui_enabled = canvas.image.is_some()
                 && has_visible_selections
                 && self.selected_model.is_some()
                 && !self.worker.is_processing();

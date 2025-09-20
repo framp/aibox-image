@@ -21,7 +21,7 @@ pub struct SelectionTool {
 
 impl SelectionTool {
     pub fn new(config: &Config) -> Self {
-        let mut tool = Self {
+        let tool = Self {
             input: String::new(),
             threshold: 0.5,
             worker: worker::Worker::new(),
@@ -29,7 +29,7 @@ impl SelectionTool {
             selected_model: None,
         };
 
-        if let Some((id, first_model)) = tool.config.models.selection.iter().enumerate().next() {
+        if let Some(first_model) = tool.config.models.selection.iter().next() {
             // load the first model immediately
             tool.worker
                 .load_model(&first_model, &tool.config.models.cache_dir);
@@ -71,27 +71,29 @@ impl SelectionTool {
             );
         });
 
-        let submit = ui.add_enabled(enabled, Button::new("Submit"));
-        let should_submit = submit.clicked()
-            || (text_edit_response.lost_focus()
-                && ui.input(|i| i.key_pressed(eframe::egui::Key::Enter)));
+        ui.horizontal(|ui| {
+            let submit = ui.add_enabled(enabled, Button::new("Submit"));
+            let should_submit = submit.clicked()
+                || (text_edit_response.lost_focus()
+                    && ui.input(|i| i.key_pressed(eframe::egui::Key::Enter)));
 
-        if should_submit && enabled {
-            self.worker.image_selection(
-                canvas.image_data.as_ref().unwrap(),
-                &self.input,
-                self.threshold,
-            );
-        }
+            if should_submit && enabled {
+                self.worker.image_selection(
+                    canvas.image.as_ref().unwrap().image(),
+                    &self.input,
+                    self.threshold,
+                );
+            }
 
-        let select_canvas = ui.add_enabled(enabled, Button::new("Select canvas"));
-        if select_canvas.clicked() {
-            let size = canvas.image_size;
-            canvas.selections.push(Selection::from_mask(
-                ui.ctx(),
-                GrayImage::from_pixel(size.x as u32, size.y as u32, Luma([255])),
-            ));
-        }
+            let select_canvas = ui.add_enabled(enabled, Button::new("Select canvas"));
+            if select_canvas.clicked() {
+                let size = canvas.image.as_ref().unwrap().size();
+                canvas.selections.push(Selection::from_mask(
+                    ui.ctx(),
+                    GrayImage::from_pixel(size.x as u32, size.y as u32, Luma([255])),
+                ));
+            }
+        });
     }
 
     fn ui_selections(&self, ui: &mut Ui, canvas: &mut ImageCanvas, enabled: bool) {
@@ -129,11 +131,11 @@ impl SelectionTool {
                             );
 
                             ui.vertical(|ui| {
-                                if ui.add_enabled(enabled, Button::new("Invert")).clicked() {
+                                if ui.add_enabled(enabled, Button::new("🔄")).clicked() {
                                     to_invert = Some(i);
                                 }
 
-                                if ui.add_enabled(enabled, Button::new("Remove")).clicked() {
+                                if ui.add_enabled(enabled, Button::new("🗑")).clicked() {
                                     to_remove = Some(i);
                                 }
                             });
@@ -187,7 +189,7 @@ impl super::Tool for SelectionTool {
         ui.push_id("selection", |ui| {
             ui.label("Selection Tool");
 
-            let ui_enabled = canvas.image_data.is_some()
+            let ui_enabled = canvas.image.is_some()
                 && self.selected_model.is_some()
                 && !self.worker.is_processing();
 

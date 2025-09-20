@@ -7,6 +7,36 @@ use image::{DynamicImage, GrayImage};
 
 use std::path::PathBuf;
 
+pub struct Image {
+    texture: TextureHandle,
+    image: DynamicImage,
+    size: Vec2,
+}
+
+impl Image {
+    pub fn new(ctx: &eframe::egui::Context, image: DynamicImage) -> Self {
+        let rgba_image = image.to_rgba8();
+        let (width, height) = rgba_image.dimensions();
+        let color_image =
+            ColorImage::from_rgba_unmultiplied([width as usize, height as usize], &rgba_image);
+        let texture = ctx.load_texture("image", color_image, Default::default());
+
+        Self {
+            texture,
+            image,
+            size: Vec2::new(width as f32, height as f32),
+        }
+    }
+
+    pub fn image(&self) -> &DynamicImage {
+        &self.image
+    }
+
+    pub fn size(&self) -> Vec2 {
+        self.size
+    }
+}
+
 #[derive(Clone)]
 pub struct Selection {
     pub mask_texture: TextureHandle,
@@ -175,9 +205,8 @@ impl Selection {
 }
 
 pub struct ImageCanvas {
-    pub texture: Option<TextureHandle>,
-    pub image_data: Option<DynamicImage>,
-    pub image_size: Vec2,
+    original_image: Option<DynamicImage>,
+    pub image: Option<Image>,
     pub zoom: f32,
     pub offset: Vec2,
     pub is_dragging: bool,
@@ -188,9 +217,8 @@ pub struct ImageCanvas {
 impl Default for ImageCanvas {
     fn default() -> Self {
         Self {
-            texture: None,
-            image_data: None,
-            image_size: Vec2::ZERO,
+            original_image: None,
+            image: None,
             zoom: 1.0,
             offset: Vec2::ZERO,
             is_dragging: false,
@@ -213,20 +241,27 @@ impl ImageCanvas {
         }
     }
 
-    pub fn set_image(&mut self, image: DynamicImage, ctx: &eframe::egui::Context) {
-        let rgba_image = image.to_rgba8();
-        let (width, height) = rgba_image.dimensions();
+    pub fn has_image(&self) -> bool {
+        self.image.is_some()
+    }
 
-        let color_image =
-            ColorImage::from_rgba_unmultiplied([width as usize, height as usize], &rgba_image);
-
-        let texture = ctx.load_texture("image", color_image, Default::default());
-
-        self.image_size = Vec2::new(width as f32, height as f32);
-        self.texture = Some(texture);
-        self.image_data = Some(image);
+    pub fn reset_zoom(&mut self) {
         self.zoom = 1.0;
         self.offset = Vec2::ZERO;
+    }
+
+    pub fn set_image(&mut self, image: DynamicImage, ctx: &eframe::egui::Context) {
+        self.image = Some(Image::new(ctx, image));
+        self.reset_zoom();
+    }
+
+    pub fn clear_image(&mut self, ctx: &eframe::egui::Context) {
+        self.image = self
+            .original_image
+            .as_ref()
+            .and_then(|img| Some(Image::new(ctx, img.clone())));
+
+        self.reset_zoom();
     }
 
     pub fn load_image(&mut self, path: PathBuf, ctx: &eframe::egui::Context) -> Result<(), String> {
@@ -234,6 +269,7 @@ impl ImageCanvas {
 
         match image_result {
             Ok(dynamic_image) => {
+                self.original_image = Some(dynamic_image.clone());
                 self.set_image(dynamic_image, ctx);
 
                 Ok(())
@@ -243,7 +279,7 @@ impl ImageCanvas {
     }
 
     pub fn show(&mut self, ui: &mut eframe::egui::Ui) {
-        if let Some(texture) = &self.texture {
+        if let Some(image) = &self.image {
             let available_size = ui.available_size();
             let response =
                 ui.allocate_response(available_size, eframe::egui::Sense::click_and_drag());
@@ -269,14 +305,14 @@ impl ImageCanvas {
             } else {
                 self.is_dragging = false;
             }
-            let scaled_size = self.image_size * self.zoom;
+            let scaled_size = image.size * self.zoom;
             let center = available_size * 0.5;
             let image_pos = center - scaled_size * 0.5 + self.offset;
             let image_rect =
                 eframe::egui::Rect::from_min_size(response.rect.min + image_pos, scaled_size);
 
             ui.painter().image(
-                texture.id(),
+                image.texture.id(),
                 image_rect,
                 eframe::egui::Rect::from_min_max(
                     eframe::egui::pos2(0.0, 0.0),
@@ -294,7 +330,7 @@ impl ImageCanvas {
                 eframe::egui::Align2::LEFT_TOP,
                 format!(
                     "Zoom: {:.1}x | Size: {}x{}",
-                    self.zoom, self.image_size.x as u32, self.image_size.y as u32
+                    self.zoom, image.size.x as u32, image.size.y as u32
                 ),
                 eframe::egui::FontId::monospace(12.0),
                 eframe::egui::Color32::WHITE,
@@ -306,33 +342,5 @@ impl ImageCanvas {
                 }
             });
         }
-    }
-
-    pub fn reset_view(&mut self) {
-        self.zoom = 1.0;
-        self.offset = Vec2::ZERO;
-    }
-
-    pub fn has_image(&self) -> bool {
-        self.texture.is_some()
-    }
-
-    pub fn clear_image(&mut self) {
-        self.texture = None;
-        self.image_data = None;
-        self.image_size = Vec2::ZERO;
-        self.zoom = 1.0;
-        self.offset = Vec2::ZERO;
-    }
-
-    pub fn fit_to_window(&mut self) {
-        if self.texture.is_some() {
-            self.offset = Vec2::ZERO;
-        }
-    }
-
-    pub fn reset_zoom(&mut self) {
-        self.zoom = 1.0;
-        self.offset = Vec2::ZERO;
     }
 }
