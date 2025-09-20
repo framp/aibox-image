@@ -6,19 +6,29 @@ use std::{
 use image::{DynamicImage, GrayImage};
 use serde_bytes::ByteBuf;
 
-use crate::ai_tools::transport::{
-    Transport,
-    types::{ImageSelectionRequest, LoadRequest, ModelKind},
-    zmq::ZmqTransport,
+use crate::config::{ModelEntry, SelectionModel};
+use crate::{
+    ai_tools::transport::{
+        Transport,
+        types::{ImageSelectionRequest, LoadRequest, ModelKind},
+        zmq::ZmqTransport,
+    },
+    worker::WorkerTrait,
 };
-use crate::config::SelectionModel;
 
 pub struct Worker {
     client: ZmqTransport,
     tx_selections: Sender<Vec<GrayImage>>,
     rx_selections: Receiver<Vec<GrayImage>>,
-    tx_load: Sender<()>,
-    rx_load: Receiver<()>,
+    tx_load: Sender<String>,
+    rx_load: Receiver<String>,
+    active_jobs: std::sync::Arc<std::sync::Mutex<usize>>,
+}
+
+impl WorkerTrait for Worker {
+    fn active_jobs(&self) -> std::sync::Arc<std::sync::Mutex<usize>> {
+        self.active_jobs.clone()
+    }
 }
 
 impl Worker {
@@ -32,6 +42,7 @@ impl Worker {
             rx_selections: rx_image,
             tx_load,
             rx_load,
+            active_jobs: std::sync::Arc::new(std::sync::Mutex::new(0)),
         }
     }
 
@@ -40,7 +51,7 @@ impl Worker {
         let prompt = prompt.to_owned();
         let client = self.client.clone();
 
-        crate::worker::run(self.tx_selections.clone(), move || {
+        self.run(self.tx_selections.clone(), move || {
             let mut image_buf = Vec::new();
             image
                 .write_to(
@@ -69,25 +80,26 @@ impl Worker {
         });
     }
 
-    pub fn load(&self, kind: SelectionModel, cache_dir: &PathBuf) {
+    pub fn load_model(&self, model: &ModelEntry<SelectionModel>, cache_dir: &PathBuf) {
         let client = self.client.clone();
         let cache_dir = cache_dir.to_str().unwrap().to_owned();
+        let model = model.to_owned();
 
-        crate::worker::run(self.tx_load.clone(), move || {
+        self.run(self.tx_load.clone(), move || {
             client.send(LoadRequest {
-                model: ModelKind::Selection(kind),
+                model: ModelKind::Selection(model.kind),
                 cache_dir,
             })?;
 
-            Ok(())
+            Ok(model.name)
         });
     }
 
-    pub fn selected(&self) -> Option<Vec<GrayImage>> {
+    pub fn selections(&self) -> Option<Vec<GrayImage>> {
         self.rx_selections.try_recv().ok()
     }
 
-    pub fn loaded(&self) -> bool {
-        self.rx_load.try_recv().is_ok()
+    pub fn model_loaded(&self) -> Option<String> {
+        self.rx_load.try_recv().ok()
     }
 }

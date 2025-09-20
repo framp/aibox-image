@@ -22,7 +22,7 @@ class HealthResponse(BaseResponse):
 class ImageSelectionRequest(BaseRequest):
     prompt: str
     image_bytes: bytes
-    threshold: float = 0.25
+    threshold: float
 
 
 class ImageSelectionResponse(BaseResponse):

@@ -101,8 +101,9 @@ impl ImageEditorApp {
     }
 
     fn save_to_path(&self, path: std::path::PathBuf) -> Result<(), String> {
-        if let Some(image_data) = &self.image_canvas.image_data {
-            image_data
+        if let Some(image) = &self.image_canvas.image {
+            image
+                .image()
                 .save(&path)
                 .map_err(|e| format!("Failed to save file: {}", e))?;
             Ok(())
@@ -153,6 +154,18 @@ impl eframe::App for ImageEditorApp {
                                     if ui.button("Exit").clicked() {
                                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                                     }
+                                });
+                                ui.add_enabled_ui(self.image_canvas.has_image(), |ui| {
+                                    ui.menu_button("Image", |ui| {
+                                        if ui.button("Reset Zoom").clicked() {
+                                            self.image_canvas.reset_zoom();
+                                            ui.close();
+                                        }
+                                        if ui.button("Revert to Original").clicked() {
+                                            self.image_canvas.clear_image(ui.ctx());
+                                            ui.close();
+                                        }
+                                    });
                                 });
                             });
                         });
