@@ -41,14 +41,11 @@ impl SelectionTool {
 
         tool
     }
-}
 
-impl super::Tool for SelectionTool {
-    fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
-        ui.push_id("selection", |ui| {
-            ui.label("Selection Tool");
+    fn ui_model_selection(&mut self, ui: &mut Ui, enabled: bool) {
+        let mut clicked_model_id = None;
 
-            let mut clicked_model_id = None;
+        ui.add_enabled_ui(enabled, |ui| {
             ComboBox::from_label("Model")
                 .selected_text(
                     self.selected_model_id
@@ -66,58 +63,157 @@ impl super::Tool for SelectionTool {
                         }
                     }
                 });
+        });
 
-            if let Some(id) = clicked_model_id {
-                self.selected_model_id = Some(id);
+        if let Some(id) = clicked_model_id {
+            self.selected_model_id = Some(id);
 
-                let model_kind = &self.config.models.selection[id].kind.clone();
-                let cache_dir = self.config.models.cache_dir.clone();
+            let model_kind = &self.config.models.selection[id].kind.clone();
+            let cache_dir = self.config.models.cache_dir.clone();
 
-                self.loading = true;
-                self.worker.load(model_kind.clone(), &cache_dir);
-            }
+            self.loading = true;
+            self.worker.load(model_kind.clone(), &cache_dir);
+        }
+    }
 
-            let text_edit_response = ui.add(TextEdit::singleline(&mut self.input));
+    fn ui_inpaint(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas, enabled: bool) {
+        let text_edit_response = ui.add_enabled(enabled, TextEdit::singleline(&mut self.input));
+        ui.horizontal(|ui| {
+            ui.label("Threshold:");
+            ui.add_enabled(
+                enabled,
+                Slider::new(&mut self.threshold, 0.0..=1.0).step_by(0.01),
+            );
+        });
 
-            ui.horizontal(|ui| {
-                ui.label("Threshold:");
-                ui.add(Slider::new(&mut self.threshold, 0.0..=1.0).step_by(0.01));
+        let submit = ui.add_enabled(enabled, Button::new("Submit"));
+        let should_submit = submit.clicked()
+            || (text_edit_response.lost_focus()
+                && ui.input(|i| i.key_pressed(eframe::egui::Key::Enter)));
+
+        if should_submit && enabled {
+            self.loading = true;
+            self.worker.image_selection(
+                canvas.image_data.as_ref().unwrap(),
+                &self.input,
+                self.threshold,
+            );
+        }
+
+        let select_canvas = ui.add_enabled(enabled, Button::new("Select canvas"));
+        if select_canvas.clicked() {
+            let size = canvas.image_size;
+            canvas.selections.push(Selection::from_mask(
+                ui.ctx(),
+                GrayImage::from_pixel(size.x as u32, size.y as u32, Luma([255])),
+            ));
+        }
+    }
+
+    fn ui_selections(&self, ui: &mut Ui, canvas: &mut ImageCanvas, enabled: bool) {
+        CollapsingHeader::new("Selections")
+            .default_open(true)
+            .show(ui, |ui| {
+                let mut to_remove: Option<usize> = None;
+                let mut to_invert: Option<usize> = None;
+                let mut visibility_updates: Vec<(usize, bool)> = Vec::new();
+                let mut parameter_updates: Vec<(usize, i32, u32)> = Vec::new();
+
+                let remove_all = ui.add_enabled(enabled, Button::new("Remove All"));
+                if remove_all.clicked() {
+                    canvas.selections = Vec::new();
+                }
+
+                for (i, sel) in canvas.selections.iter().enumerate() {
+                    ui.group(|ui| {
+                        ui.horizontal(|ui| {
+                            let size = sel.overlay_texture.size_vec2();
+                            let max_side = 128.0;
+                            let scale = (max_side / size.x.max(size.y)).min(1.0);
+                            let thumb_size = size * scale;
+
+                            let mut visible = sel.visible;
+                            let response =
+                                ui.add_enabled(enabled, Checkbox::without_text(&mut visible));
+                            if response.changed() {
+                                visibility_updates.push((i, visible));
+                            }
+
+                            ui.add_enabled(
+                                enabled,
+                                Image::new(&sel.mask_texture).fit_to_exact_size(thumb_size),
+                            );
+
+                            ui.vertical(|ui| {
+                                if ui.add_enabled(enabled, Button::new("Invert")).clicked() {
+                                    to_invert = Some(i);
+                                }
+
+                                if ui.add_enabled(enabled, Button::new("Remove")).clicked() {
+                                    to_remove = Some(i);
+                                }
+                            });
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Growth:");
+                            let mut growth = sel.growth;
+                            let growth_response =
+                                ui.add_enabled(enabled, DragValue::new(&mut growth).speed(1.0));
+
+                            ui.label("Blur:");
+                            let mut blur = sel.blur;
+                            let blur_response = ui.add_enabled(
+                                enabled,
+                                DragValue::new(&mut blur).speed(1.0).range(0..=100),
+                            );
+
+                            if growth_response.changed() || blur_response.changed() {
+                                parameter_updates.push((i, growth, blur));
+                            }
+                        });
+                    });
+                }
+
+                for (i, visible) in visibility_updates {
+                    canvas.selections[i].visible = visible;
+                }
+
+                for (i, growth, blur) in parameter_updates {
+                    canvas.selections[i].growth = growth;
+                    canvas.selections[i].blur = blur;
+                    canvas.selections[i].update_applied_mask(ui.ctx());
+                }
+
+                if let Some(i) = to_invert {
+                    let old = &canvas.selections[i];
+                    canvas.selections[i] =
+                        Selection::from_mask(ui.ctx(), invert_mask(&old.original_mask));
+                }
+
+                if let Some(i) = to_remove {
+                    canvas.selections.remove(i);
+                }
             });
+    }
+}
 
-            let can_submit =
+impl super::Tool for SelectionTool {
+    fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
+        ui.push_id("selection", |ui| {
+            ui.label("Selection Tool");
+
+            let ui_enabled =
                 canvas.image_data.is_some() && self.selected_model_id.is_some() && !self.loading;
 
-            let submit = ui.add_enabled(can_submit, Button::new("Submit"));
-            let should_submit = submit.clicked()
-                || (text_edit_response.lost_focus()
-                    && ui.input(|i| i.key_pressed(eframe::egui::Key::Enter)));
-
-            if should_submit && can_submit {
-                self.loading = true;
-                self.worker.image_selection(
-                    canvas.image_data.as_ref().unwrap(),
-                    &self.input,
-                    self.threshold,
-                );
-            }
-
-            let clear = ui.add(Button::new("Clear"));
-            if clear.clicked() {
-                canvas.selections = Vec::new();
-            }
-
-            let select_all = ui.add(Button::new("Select canvas"));
-            if select_all.clicked() {
-                let size = canvas.image_size;
-                canvas.selections.push(Selection::from_mask(
-                    ui.ctx(),
-                    GrayImage::from_pixel(size.x as u32, size.y as u32, Luma([255])),
-                ));
-            }
+            self.ui_model_selection(ui, ui_enabled);
 
             if self.loading {
                 ui.spinner();
             }
+
+            self.ui_inpaint(ui, canvas, ui_enabled);
+            self.ui_selections(ui, canvas, ui_enabled);
 
             if self.worker.loaded() {
                 self.loading = false;
@@ -136,80 +232,6 @@ impl super::Tool for SelectionTool {
                     })
                     .collect();
             }
-
-            CollapsingHeader::new("Selections")
-                .default_open(true)
-                .show(ui, |ui| {
-                    let mut to_remove: Option<usize> = None;
-                    let mut to_invert: Option<usize> = None;
-                    let mut visibility_updates: Vec<(usize, bool)> = Vec::new();
-                    let mut parameter_updates: Vec<(usize, i32, u32)> = Vec::new();
-
-                    for (i, sel) in canvas.selections.iter().enumerate() {
-                        ui.group(|ui| {
-                            ui.horizontal(|ui| {
-                                let size = sel.overlay_texture.size_vec2();
-                                let max_side = 128.0;
-                                let scale = (max_side / size.x.max(size.y)).min(1.0);
-                                let thumb_size = size * scale;
-
-                                let mut visible = sel.visible;
-                                let response = ui.add(Checkbox::without_text(&mut visible));
-                                if response.changed() {
-                                    visibility_updates.push((i, visible));
-                                }
-
-                                ui.add(Image::new(&sel.mask_texture).fit_to_exact_size(thumb_size));
-
-                                ui.vertical(|ui| {
-                                    if ui.button("Invert").clicked() {
-                                        to_invert = Some(i);
-                                    }
-
-                                    if ui.button("Remove").clicked() {
-                                        to_remove = Some(i);
-                                    }
-                                });
-                            });
-
-                            ui.horizontal(|ui| {
-                                ui.label("Growth:");
-                                let mut growth = sel.growth;
-                                let growth_response =
-                                    ui.add(DragValue::new(&mut growth).speed(1.0));
-
-                                ui.label("Blur:");
-                                let mut blur = sel.blur;
-                                let blur_response =
-                                    ui.add(DragValue::new(&mut blur).speed(1.0).range(0..=100));
-
-                                if growth_response.changed() || blur_response.changed() {
-                                    parameter_updates.push((i, growth, blur));
-                                }
-                            });
-                        });
-                    }
-
-                    for (i, visible) in visibility_updates {
-                        canvas.selections[i].visible = visible;
-                    }
-
-                    for (i, growth, blur) in parameter_updates {
-                        canvas.selections[i].growth = growth;
-                        canvas.selections[i].blur = blur;
-                        canvas.selections[i].update_applied_mask(ui.ctx());
-                    }
-
-                    if let Some(i) = to_invert {
-                        let old = &canvas.selections[i];
-                        canvas.selections[i] =
-                            Selection::from_mask(ui.ctx(), invert_mask(&old.original_mask));
-                    }
-
-                    if let Some(i) = to_remove {
-                        canvas.selections.remove(i);
-                    }
-                });
         });
     }
 }
