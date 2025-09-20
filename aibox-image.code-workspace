@@ -4,7 +4,8 @@
     { "path": "app" },
     { "path": "backend/aibox-image-lib" },
     { "path": "backend/inpainting-service" },
-    { "path": "backend/selection-service" }
+    { "path": "backend/selection-service" },
+    { "path": "backend/upscaling-service" }
   ],
   "settings": {
     "ruff.interpreter": [

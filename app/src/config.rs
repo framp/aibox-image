@@ -14,6 +14,7 @@ pub struct Models {
     pub cache_dir: PathBuf,
     pub selection: Vec<ModelEntry<SelectionModel>>,
     pub inpainting: Vec<ModelEntry<InpaintingModel>>,
+    pub upscaling: Vec<ModelEntry<UpscalingModel>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -36,6 +37,13 @@ pub enum SelectionModel {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum InpaintingModel {
+    #[serde(rename = "stable_diffusion")]
+    StableDiffusion { model_or_checkpoint: String },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum UpscalingModel {
     #[serde(rename = "stable_diffusion")]
     StableDiffusion { model_or_checkpoint: String },
 }
