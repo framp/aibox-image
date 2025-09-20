@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use futures::compat::Future01CompatExt;
 use rmp_serde::Serializer;
 use serde::{Serialize, de::DeserializeOwned};
@@ -20,10 +21,7 @@ impl ZmqTransport {
 }
 
 impl Transport for ZmqTransport {
-    async fn send<ReqType>(
-        &self,
-        req: ReqType,
-    ) -> Result<ReqType::Response, Box<dyn std::error::Error + Send + Sync>>
+    async fn send<ReqType>(&self, req: ReqType) -> Result<ReqType::Response>
     where
         ReqType: IntoResponse + Serialize + Into<Request> + Send,
         ReqType::Response: DeserializeOwned,
@@ -38,13 +36,15 @@ impl Transport for ZmqTransport {
         // Serialize the request
         let mut buf = Vec::new();
         let request = Request::from(req.into());
-        request.serialize(&mut Serializer::new(&mut buf).with_struct_map())?;
+        request
+            .serialize(&mut Serializer::new(&mut buf).with_struct_map())
+            .context("Failed to serialize request")?;
 
         // Convert futures 0.1 to std::future using compat layer
         let socket = socket_future
             .compat()
             .await
-            .map_err(|e| format!("ZMQ socket build error: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to build ZMQ socket: {}", e))?;
 
         // Create multipart message
         let multipart = Multipart::from(vec![zmq::Message::from(&buf[..])]);
@@ -54,19 +54,20 @@ impl Transport for ZmqTransport {
             .send(multipart)
             .compat()
             .await
-            .map_err(|e| format!("ZMQ send error: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to send ZMQ message: {}", e))?;
         let (response_multipart, _socket) = socket
             .recv()
             .compat()
             .await
-            .map_err(|e| format!("ZMQ recv error: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to receive ZMQ response: {}", e))?;
 
         // Extract the response data
         let raw_data = response_multipart
             .get(0)
-            .ok_or("Empty response multipart")?
+            .context("Empty response multipart")?
             .to_vec();
-        let decoded = rmp_serde::from_slice::<ReqType::Response>(&raw_data)?;
+        let decoded = rmp_serde::from_slice::<ReqType::Response>(&raw_data)
+            .context("Failed to deserialize response")?;
 
         Ok(decoded)
     }

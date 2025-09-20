@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::Sender;
 
@@ -14,9 +15,7 @@ pub trait WorkerTrait {
     where
         T: Send + 'static,
         F: FnOnce() -> Fut + Send + 'static,
-        Fut: std::future::Future<Output = Result<T, Box<dyn std::error::Error + Send + Sync>>>
-            + Send
-            + 'static,
+        Fut: std::future::Future<Output = Result<T>> + Send + 'static,
     {
         let jobs = self.active_jobs();
 

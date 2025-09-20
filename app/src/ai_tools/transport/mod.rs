@@ -1,13 +1,11 @@
+use anyhow::Result;
 use serde::{Serialize, de::DeserializeOwned};
 
 pub mod types;
 pub mod zmq;
 
 pub trait Transport {
-    async fn send<Req>(
-        &self,
-        req: Req,
-    ) -> Result<Req::Response, Box<dyn std::error::Error + Send + Sync>>
+    async fn send<Req>(&self, req: Req) -> Result<Req::Response>
     where
         Req: IntoResponse + Serialize + Into<types::Request> + Send,
         Req::Response: DeserializeOwned;

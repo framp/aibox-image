@@ -1,6 +1,8 @@
 use std::{io::Cursor, path::PathBuf};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
+use anyhow::Context;
+
 use image::{DynamicImage, GrayImage, Luma};
 use serde_bytes::ByteBuf;
 
@@ -71,11 +73,8 @@ impl Worker {
                 })
                 .await?;
 
-            let inpainted_image = image::load_from_memory(&response.image).map_err(
-                |e| -> Box<dyn std::error::Error + Send + Sync> {
-                    Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-                },
-            )?;
+            let inpainted_image = image::load_from_memory(&response.image)
+                .context("Failed to load inpainted image from memory")?;
 
             Ok(inpainted_image)
         });
