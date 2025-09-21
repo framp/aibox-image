@@ -61,7 +61,10 @@ pub enum PortraitEditingModel {
 #[serde(tag = "type")]
 pub enum FaceSwappingModel {
     #[serde(rename = "insightface")]
-    InsightFace { model_or_checkpoint: String },
+    InsightFace {
+        #[serde(default)]
+        model_or_checkpoint: String
+    },
 }
 
 pub fn load() -> Result<Config, Box<dyn std::error::Error>> {

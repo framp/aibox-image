@@ -49,6 +49,7 @@ pub enum Request {
     Upscale(UpscaleRequest),
     EditExpression(EditExpressionRequest),
     FaceSwap(FaceSwapRequest),
+    AnalyzeFaces(AnalyzeFacesRequest),
     Load(LoadRequest),
 }
 
@@ -202,6 +203,36 @@ impl Into<Request> for FaceSwapRequest {
 #[serde(rename_all = "snake_case")]
 pub struct FaceSwapResponse {
     pub image: ByteBuf,
+}
+
+#[derive(Serialize, Debug)]
+pub struct AnalyzeFacesRequest {
+    pub image_bytes: ByteBuf,
+}
+
+impl IntoResponse for AnalyzeFacesRequest {
+    type Response = AnalyzeFacesResponse;
+}
+
+impl Into<Request> for AnalyzeFacesRequest {
+    fn into(self) -> Request {
+        Request::AnalyzeFaces(self)
+    }
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct AnalyzeFacesResponse {
+    pub faces: Vec<FaceInfo>,
+    pub preview_image: ByteBuf,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct FaceInfo {
+    pub index: i32,
+    pub bbox: Vec<i32>,
+    pub confidence: f32,
+    pub is_primary: bool,
 }
 
 #[derive(Deserialize, Debug)]

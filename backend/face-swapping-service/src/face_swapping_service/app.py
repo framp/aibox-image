@@ -30,6 +30,16 @@ class FaceSwapResponse(BaseResponse):
     image: bytes
 
 
+class AnalyzeFacesRequest(BaseRequest):
+    image_bytes: bytes
+
+
+class AnalyzeFacesResponse(BaseResponse):
+    status: str
+    faces: list
+    preview_image: bytes
+
+
 def register_use_cases(transport: Transport, service: Service):
     @transport.handler()
     def load(request: LoadRequest):
@@ -53,3 +63,15 @@ def register_use_cases(transport: Transport, service: Service):
         image_bytes = buffer.getvalue()
 
         return FaceSwapResponse(status="success", image=image_bytes)
+
+    @transport.handler("analyze_faces")
+    def analyze_faces(request: AnalyzeFacesRequest):
+        source_image = Image.open(io.BytesIO(request.image_bytes)).convert("RGB")
+
+        faces_info, preview_image = service.analyze_faces_with_preview(source_image)
+
+        buffer = io.BytesIO()
+        preview_image.save(buffer, format="PNG")
+        preview_bytes = buffer.getvalue()
+
+        return AnalyzeFacesResponse(status="success", faces=faces_info, preview_image=preview_bytes)
