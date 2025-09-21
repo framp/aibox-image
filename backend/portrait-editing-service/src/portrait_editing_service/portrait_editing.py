@@ -10,12 +10,16 @@ from scipy.interpolate import CubicSpline
 from pathlib import Path
 import logging
 from huggingface_hub import snapshot_download
-import liveportrait
-from liveportrait import LivePortraitWrapper
-from liveportrait.utils.camera import get_rotation_matrix
-from liveportrait.config.inference_config import InferenceConfig
 
+# Add LivePortrait to Python path
+import sys
+liveportrait_path = Path(__file__).parent.parent.parent / "LivePortrait"
+if liveportrait_path.exists():
+    sys.path.insert(0, str(liveportrait_path))
 
+from src.live_portrait_wrapper import LivePortraitWrapper
+from src.utils.camera import get_rotation_matrix
+from src.config.inference_config import InferenceConfig
 
 DEVICE = (
     "mps"
@@ -262,16 +266,14 @@ class LivePortraitEngine:
 
     def _create_pipeline(self):
         """Create and return the LivePortrait pipeline"""
-        # Setup inference config with model paths from downloaded models and config from local models.yaml
+        # Setup inference config with model paths from downloaded models and config from cloned repo
+        liveportrait_repo = Path(__file__).parent.parent.parent / "LivePortrait"
         liveportrait_dir = self.models_dir / "liveportrait"
         base_models_dir = liveportrait_dir / "base_models"
         retargeting_models_dir = liveportrait_dir / "retargeting_models"
 
-        # Use models.yaml config from installed package
-        models_config_path = Path(__file__).parent.parent.parent.parent / ".venv" / "lib" / "python3.10" / "site-packages" / "liveportrait" / "config" / "models.yaml"
-
         inference_cfg = InferenceConfig(
-            models_config=str(models_config_path),
+            models_config=str(liveportrait_repo / "src" / "config" / "models.yaml"),
             checkpoint_F=str(base_models_dir / "appearance_feature_extractor.pth"),
             checkpoint_M=str(base_models_dir / "motion_extractor.pth"),
             checkpoint_G=str(base_models_dir / "spade_generator.pth"),
@@ -306,12 +308,13 @@ class LivePortraitEngine:
 
     def get_mask(self):
         if self.mask_img is None:
-            # Get mask from installed package
-            mask_path = Path(__file__).parent.parent.parent.parent / ".venv" / "lib" / "python3.10" / "site-packages" / "liveportrait" / "utils" / "resources" / "mask_template.png"
-
+            # Look for mask template in LivePortrait resources
+            mask_path = liveportrait_path / "src" / "utils" / "resources" / "mask_template.png"
             if mask_path.exists():
                 self.mask_img = cv2.imread(str(mask_path), cv2.IMREAD_COLOR)
-
+            else:
+                # Create a default mask if not found
+                self.mask_img = np.ones((256, 256, 3), dtype=np.uint8) * 255
         return self.mask_img
 
     def prepare_source(self, source_image):

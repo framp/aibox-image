@@ -1,8 +1,6 @@
 use eframe::egui::{Button, CollapsingHeader, ComboBox, DragValue, Ui};
 
-use crate::{
-    ai_tools::transport::types::ExpressionParams, config::Config, image_canvas::ImageCanvas,
-};
+use crate::{config::Config, image_canvas::ImageCanvas};
 
 mod worker;
 
@@ -250,21 +248,21 @@ impl super::Tool for PortraitTool {
                 if submit.clicked() && can_submit {
                     self.loading = true;
 
-                    let expression_params = ExpressionParams {
-                        rotate_pitch: self.rotate_pitch as f64,
-                        rotate_yaw: self.rotate_yaw as f64,
-                        rotate_roll: self.rotate_roll as f64,
-                        blink: self.blink as f64,
-                        eyebrow: self.eyebrow as f64,
-                        wink: self.wink as f64,
-                        pupil_x: self.pupil_x as f64,
-                        pupil_y: self.pupil_y as f64,
-                        aaa: self.aaa as f64,
-                        eee: self.eee as f64,
-                        woo: self.woo as f64,
-                        smile: self.smile as f64,
-                        src_weight: self.src_weight as f64,
-                    };
+                    let expression_params = std::collections::HashMap::from([
+                        ("rotate_pitch".to_string(), self.rotate_pitch as f64),
+                        ("rotate_yaw".to_string(), self.rotate_yaw as f64),
+                        ("rotate_roll".to_string(), self.rotate_roll as f64),
+                        ("blink".to_string(), self.blink as f64),
+                        ("eyebrow".to_string(), self.eyebrow as f64),
+                        ("wink".to_string(), self.wink as f64),
+                        ("pupil_x".to_string(), self.pupil_x as f64),
+                        ("pupil_y".to_string(), self.pupil_y as f64),
+                        ("aaa".to_string(), self.aaa as f64),
+                        ("eee".to_string(), self.eee as f64),
+                        ("woo".to_string(), self.woo as f64),
+                        ("smile".to_string(), self.smile as f64),
+                        ("src_weight".to_string(), self.src_weight as f64),
+                    ]);
 
                     self.worker
                         .edit_expression(canvas.image.as_ref().unwrap().image(), expression_params);

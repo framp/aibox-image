@@ -21,19 +21,7 @@ class HealthResponse(BaseResponse):
 
 class EditExpressionRequest(BaseRequest):
     image_bytes: bytes
-    rotate_pitch: float
-    rotate_yaw: float
-    rotate_roll: float
-    blink: float
-    eyebrow: float
-    wink: float
-    pupil_x: float
-    pupil_y: float
-    aaa: float
-    eee: float
-    woo: float
-    smile: float
-    src_weight: float
+    expression_params: dict
 
 
 class EditExpressionResponse(BaseResponse):
@@ -56,23 +44,7 @@ def register_use_cases(transport: Transport, service: Service):
     def edit_expression(request: EditExpressionRequest):
         image = Image.open(io.BytesIO(request.image_bytes)).convert("RGB")
 
-        expression_params = {
-            "rotate_pitch": request.rotate_pitch,
-            "rotate_yaw": request.rotate_yaw,
-            "rotate_roll": request.rotate_roll,
-            "blink": request.blink,
-            "eyebrow": request.eyebrow,
-            "wink": request.wink,
-            "pupil_x": request.pupil_x,
-            "pupil_y": request.pupil_y,
-            "aaa": request.aaa,
-            "eee": request.eee,
-            "woo": request.woo,
-            "smile": request.smile,
-            "src_weight": request.src_weight,
-        }
-
-        result_image = service.edit_expression(image, expression_params)
+        result_image = service.edit_expression(image, request.expression_params)
 
         buffer = io.BytesIO()
         result_image.save(buffer, format="PNG")
