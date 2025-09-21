@@ -149,20 +149,18 @@ impl super::Tool for FaceSwapTool {
                 if !self.canvas_faces.is_empty() {
                     ui.label("Click on a face to select it for swapping:");
 
-                    ui.horizontal(|ui| {
-                        for (i, face) in self.canvas_faces.iter().enumerate() {
-                            let is_selected = self.selected_face_index == Some(i as i32);
-                            let button_text = if face.is_primary {
-                                format!("Face {} (Primary)", i)
-                            } else {
-                                format!("Face {}", i)
-                            };
+                    for (i, face) in self.canvas_faces.iter().enumerate() {
+                        let is_selected = self.selected_face_index == Some(i as i32);
+                        let button_text = if face.is_primary {
+                            format!("Face {} (Primary)", i)
+                        } else {
+                            format!("Face {}", i)
+                        };
 
-                            if ui.selectable_label(is_selected, &button_text).clicked() {
-                                self.selected_face_index = Some(i as i32);
-                            }
+                        if ui.selectable_label(is_selected, &button_text).clicked() {
+                            self.selected_face_index = Some(i as i32);
                         }
-                    });
+                    }
                 }
             }
 
