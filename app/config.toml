@@ -23,4 +23,6 @@ type = "liveportrait"
 
 [[models.face_swapping]]
 name = "InsightFace"
-type = "insightface"
+type = "face_swapping"
+insightface_model = "insightface"
+inswapper_model = "inswapper"
