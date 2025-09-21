@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::Sender;
 
@@ -31,7 +32,10 @@ pub trait WorkerTrait {
                     let _ = sender.send(value).await;
                 }
                 Err(err) => {
-                    eprintln!("Worker job failed: {err}");
+                    eprintln!("Worker job failed with error: {err:?}");
+                    if let Some(source) = err.source() {
+                        eprintln!("  Caused by: {source:?}");
+                    }
                 }
             }
 

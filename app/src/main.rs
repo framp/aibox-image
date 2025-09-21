@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(rustdoc::missing_crate_level_docs)]
 
+use anyhow::Context;
 use eframe::egui;
 
 mod ai_tools;
@@ -11,12 +12,13 @@ mod worker;
 use ai_tools::ToolsPanel;
 use image_canvas::ImageCanvas;
 
-fn main() -> eframe::Result {
+fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    let config = config::load().expect("Failed to load config");
+    let config =
+        config::load().map_err(|e| anyhow::anyhow!("Failed to load application config: {}", e))?;
 
-    let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+    let rt = tokio::runtime::Runtime::new().context("Failed to create Tokio runtime")?;
 
     rt.block_on(async {
         let options: eframe::NativeOptions = eframe::NativeOptions {
@@ -35,6 +37,7 @@ fn main() -> eframe::Result {
                 Ok(Box::new(ImageEditorApp::new(&config)))
             }),
         )
+        .map_err(|e| anyhow::anyhow!("Failed to run eframe application: {:?}", e))
     })
 }
 
