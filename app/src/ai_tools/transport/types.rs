@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 
 use super::IntoResponse;
-use crate::config::{InpaintingModel, PortraitEditingModel, SelectionModel, UpscalingModel};
+use crate::config::{FaceSwappingModel, InpaintingModel, PortraitEditingModel, SelectionModel, UpscalingModel};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExpressionParams {
@@ -48,6 +48,8 @@ pub enum Request {
     Inpaint(InpaintRequest),
     Upscale(UpscaleRequest),
     EditExpression(EditExpressionRequest),
+    FaceSwap(FaceSwapRequest),
+    AnalyzeFaces(AnalyzeFacesRequest),
     Load(LoadRequest),
 }
 
@@ -160,6 +162,7 @@ pub enum ModelKind {
     Inpainting(InpaintingModel),
     Upscaling(UpscalingModel),
     PortraitEditing(PortraitEditingModel),
+    FaceSwapping(FaceSwappingModel),
 }
 
 #[derive(Serialize, Debug)]
@@ -177,6 +180,59 @@ impl Into<Request> for LoadRequest {
     fn into(self) -> Request {
         Request::Load(self)
     }
+}
+
+#[derive(Serialize, Debug)]
+pub struct FaceSwapRequest {
+    pub source_image_bytes: ByteBuf,
+    pub target_image_bytes: ByteBuf,
+    pub face_index: i32,
+}
+
+impl IntoResponse for FaceSwapRequest {
+    type Response = FaceSwapResponse;
+}
+
+impl Into<Request> for FaceSwapRequest {
+    fn into(self) -> Request {
+        Request::FaceSwap(self)
+    }
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct FaceSwapResponse {
+    pub image: ByteBuf,
+}
+
+#[derive(Serialize, Debug)]
+pub struct AnalyzeFacesRequest {
+    pub image_bytes: ByteBuf,
+}
+
+impl IntoResponse for AnalyzeFacesRequest {
+    type Response = AnalyzeFacesResponse;
+}
+
+impl Into<Request> for AnalyzeFacesRequest {
+    fn into(self) -> Request {
+        Request::AnalyzeFaces(self)
+    }
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct AnalyzeFacesResponse {
+    pub faces: Vec<FaceInfo>,
+    pub preview_image: ByteBuf,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct FaceInfo {
+    pub index: i32,
+    pub bbox: Vec<i32>,
+    pub confidence: f32,
+    pub is_primary: bool,
 }
 
 #[derive(Deserialize, Debug)]

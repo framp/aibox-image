@@ -16,6 +16,7 @@ pub struct Models {
     pub inpainting: Vec<ModelEntry<InpaintingModel>>,
     pub upscaling: Vec<ModelEntry<UpscalingModel>>,
     pub portrait_editing: Vec<ModelEntry<PortraitEditingModel>>,
+    pub face_swapping: Vec<ModelEntry<FaceSwappingModel>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -54,6 +55,18 @@ pub enum UpscalingModel {
 pub enum PortraitEditingModel {
     #[serde(rename = "liveportrait")]
     LivePortrait,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum FaceSwappingModel {
+    #[serde(rename = "face_swapping")]
+    FaceSwapping {
+        #[serde(default)]
+        insightface_model: String,
+        #[serde(default)]
+        inswapper_model: String,
+    },
 }
 
 pub fn load() -> Result<Config, Box<dyn std::error::Error>> {
