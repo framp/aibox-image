@@ -3,6 +3,7 @@ use eframe::egui::Ui;
 use crate::{config::Config, image_canvas::ImageCanvas};
 
 pub mod error;
+mod face_swap;
 mod inpaint;
 mod portrait;
 mod selection;
@@ -26,6 +27,7 @@ impl ToolsPanel {
         tools.push(Box::new(inpaint::InpaintTool::new(&config)) as Box<dyn Tool>);
         tools.push(Box::new(upscale::UpscaleTool::new(&config)) as Box<dyn Tool>);
         tools.push(Box::new(portrait::PortraitTool::new(&config)) as Box<dyn Tool>);
+        tools.push(Box::new(face_swap::FaceSwapTool::new(&config)) as Box<dyn Tool>);
 
         Self { tools }
     }

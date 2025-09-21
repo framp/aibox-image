@@ -20,3 +20,8 @@ model_or_checkpoint = "stabilityai/stable-diffusion-x4-upscaler"
 [[models.portrait_editing]]
 name = "LivePortrait"
 type = "liveportrait"
+
+[[models.face_swapping]]
+name = "InsightFace"
+type = "insightface"
+model_or_checkpoint = ""

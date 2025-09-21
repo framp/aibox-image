@@ -1,0 +1,247 @@
+import logging
+import os
+import hashlib
+from pathlib import Path
+from typing import Protocol, Optional, List, Union
+
+import cv2
+import numpy as np
+from PIL import Image
+import insightface
+from insightface.app.common import Face
+import torch
+from huggingface_hub import hf_hub_download
+
+
+class FaceSwapperProtocol(Protocol):
+    def swap_face(self, source_image: Image.Image, target_image: Image.Image, face_index: int) -> Image.Image: ...
+
+
+def get_image_md5hash(image: np.ndarray) -> str:
+    """Get MD5 hash of image array"""
+    return hashlib.md5(image.tobytes()).hexdigest()
+
+
+def get_providers():
+    """Get optimal execution providers based on available hardware"""
+    try:
+        if torch.cuda.is_available():
+            providers = ["CUDAExecutionProvider"]
+        elif torch.backends.mps.is_available():
+            providers = ["CoreMLExecutionProvider"]
+        else:
+            providers = ["CPUExecutionProvider"]
+    except Exception as e:
+        logging.debug(f"ExecutionProviderError: {e}. EP is set to CPU.")
+        providers = ["CPUExecutionProvider"]
+    return providers
+
+
+def analyze_faces(img_data: np.ndarray, det_size=(640, 640), face_analyser=None):
+    """Analyze faces in image data"""
+    if face_analyser is None:
+        return []
+
+    faces = []
+    try:
+        faces = face_analyser.get(img_data)
+    except Exception as e:
+        logging.error(f"No faces found: {e}")
+
+    # Try halving det_size if no faces are found
+    if len(faces) == 0 and det_size[0] > 320 and det_size[1] > 320:
+        det_size_half = (det_size[0] // 2, det_size[1] // 2)
+        logging.info("Trying to halve 'det_size' parameter")
+        face_analyser.prepare(ctx_id=0, det_size=det_size_half)
+        try:
+            faces = face_analyser.get(img_data)
+        except Exception as e:
+            logging.error(f"No faces found with halved det_size: {e}")
+
+    return faces
+
+
+def sort_faces_by_order(faces: List[Face], order: str = "large-small"):
+    """Sort faces by specified order"""
+    if order == "left-right":
+        return sorted(faces, key=lambda x: x.bbox[0])
+    elif order == "right-left":
+        return sorted(faces, key=lambda x: x.bbox[0], reverse=True)
+    elif order == "top-bottom":
+        return sorted(faces, key=lambda x: x.bbox[1])
+    elif order == "bottom-top":
+        return sorted(faces, key=lambda x: x.bbox[1], reverse=True)
+    elif order == "small-large":
+        return sorted(faces, key=lambda x: (x.bbox[2] - x.bbox[0]) * (x.bbox[3] - x.bbox[1]))
+    else:  # "large-small" by default
+        return sorted(faces, key=lambda x: (x.bbox[2] - x.bbox[0]) * (x.bbox[3] - x.bbox[1]), reverse=True)
+
+
+def get_face_by_index(faces: List[Face], face_index: int, order: str = "large-small") -> Optional[Face]:
+    """Get face by index from sorted faces"""
+    if not faces:
+        return None
+
+    faces_sorted = sort_faces_by_order(faces, order)
+
+    if face_index >= len(faces_sorted):
+        logging.info(f"Requested face index ({face_index}) is out of bounds (max available index is {len(faces_sorted) - 1})")
+        return None
+
+    return faces_sorted[face_index]
+
+
+def download_inswapper_model(cache_dir: Path) -> str:
+    """Download inswapper_128.onnx model from Hugging Face"""
+    model_filename = "inswapper_128.onnx"
+    model_path = cache_dir / "inswapper" / model_filename
+
+    if model_path.exists():
+        logging.info(f"Model already exists at: {model_path}")
+        return str(model_path)
+
+    logging.info("Downloading inswapper_128.onnx from Hugging Face...")
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        downloaded_path = hf_hub_download(
+            repo_id="ezioruan/inswapper_128.onnx",
+            filename=model_filename,
+            cache_dir=str(cache_dir / "huggingface"),
+            local_dir=str(model_path.parent),
+            local_dir_use_symlinks=False
+        )
+        logging.info(f"Successfully downloaded model to: {downloaded_path}")
+        return downloaded_path
+    except Exception as e:
+        logging.error(f"Failed to download model from Hugging Face: {e}")
+        raise
+
+
+class FaceSwapper(FaceSwapperProtocol):
+    def __init__(self, cache_dir: Path, model_or_checkpoint: str):
+        logging.info(f"Initializing face swapper with model: {model_or_checkpoint}")
+        self.cache_dir = cache_dir
+        self.model_or_checkpoint = model_or_checkpoint
+
+        # Initialize providers
+        self.providers = get_providers()
+        logging.info(f"Using providers: {self.providers}")
+
+        # Initialize face analysis model
+        self.face_analyser = None
+        self.face_swapper_model = None
+
+        # Cache for analyzed faces
+        self.source_faces_cache = {}
+        self.target_faces_cache = {}
+
+        # Initialize models
+        self._init_models()
+
+    def _init_models(self):
+        """Initialize face analysis and swapping models"""
+        try:
+            # Initialize face analysis model
+            insightface_path = self.cache_dir / "insightface"
+            insightface_path.mkdir(parents=True, exist_ok=True)
+
+            logging.info("Loading face analysis model...")
+            self.face_analyser = insightface.app.FaceAnalysis(
+                name="buffalo_l",
+                providers=self.providers,
+                root=str(insightface_path)
+            )
+            self.face_analyser.prepare(ctx_id=0, det_size=(640, 640))
+
+            # Initialize face swapper model
+            model_path = self.model_or_checkpoint
+
+            if not model_path or not os.path.exists(model_path):
+                logging.info("Face swapper model not found locally, downloading from Hugging Face...")
+                try:
+                    model_path = download_inswapper_model(self.cache_dir)
+                except Exception as e:
+                    logging.error(f"Failed to download model: {e}")
+                    model_path = None
+
+            if model_path and os.path.exists(model_path):
+                logging.info(f"Loading face swapper model from: {model_path}")
+                self.face_swapper_model = insightface.model_zoo.get_model(
+                    model_path,
+                    providers=self.providers
+                )
+            else:
+                logging.warning("Face swapper model not found or could not be downloaded")
+
+        except Exception as e:
+            logging.error(f"Failed to initialize models: {e}")
+            raise
+
+    def swap_face(self, source_image: Image.Image, target_image: Image.Image, face_index: int) -> Image.Image:
+        """Perform face swapping between source and target images"""
+        logging.info(f"Face swapping requested with face index: {face_index}")
+
+        if self.face_analyser is None or self.face_swapper_model is None:
+            logging.error("Models not properly initialized")
+            return target_image
+
+        try:
+            # Convert PIL images to OpenCV format
+            source_cv = cv2.cvtColor(np.array(source_image), cv2.COLOR_RGB2BGR)
+            target_cv = cv2.cvtColor(np.array(target_image), cv2.COLOR_RGB2BGR)
+
+            # Analyze source image for faces
+            source_hash = get_image_md5hash(source_cv)
+            if source_hash not in self.source_faces_cache:
+                logging.info("Analyzing source image...")
+                source_faces = analyze_faces(source_cv, face_analyser=self.face_analyser)
+                self.source_faces_cache[source_hash] = source_faces
+            else:
+                logging.info("Using cached source faces...")
+                source_faces = self.source_faces_cache[source_hash]
+
+            # Analyze target image for faces
+            target_hash = get_image_md5hash(target_cv)
+            if target_hash not in self.target_faces_cache:
+                logging.info("Analyzing target image...")
+                target_faces = analyze_faces(target_cv, face_analyser=self.face_analyser)
+                self.target_faces_cache[target_hash] = target_faces
+            else:
+                logging.info("Using cached target faces...")
+                target_faces = self.target_faces_cache[target_hash]
+
+            # Check if faces were found
+            if not source_faces:
+                logging.warning("No faces found in source image")
+                return target_image
+
+            if not target_faces:
+                logging.warning("No faces found in target image")
+                return target_image
+
+            # Get source face (use first face if multiple)
+            source_face = get_face_by_index(source_faces, 0)
+            if source_face is None:
+                logging.warning("Could not get source face")
+                return target_image
+
+            # Get target face by index
+            target_face = get_face_by_index(target_faces, face_index)
+            if target_face is None:
+                logging.warning(f"Could not get target face at index {face_index}")
+                return target_image
+
+            # Perform face swapping
+            logging.info("Performing face swap...")
+            result_cv = self.face_swapper_model.get(target_cv, target_face, source_face)
+
+            # Convert result back to PIL Image
+            result_image = Image.fromarray(cv2.cvtColor(result_cv, cv2.COLOR_BGR2RGB))
+
+            logging.info("Face swap completed successfully")
+            return result_image
+
+        except Exception as e:
+            logging.error(f"Face swapping failed: {e}")
+            return target_image
