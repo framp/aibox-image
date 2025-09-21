@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//mnt/extra/projects/aibox-image/backend/upscaling-service/**)",
+      "Read(//mnt/extra/projects/aibox-image/backend/**)",
+      "Read(//mnt/extra/projects/aibox-image/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
