@@ -2,6 +2,7 @@ use eframe::egui::Ui;
 
 use crate::{config::Config, image_canvas::ImageCanvas};
 
+pub mod error;
 mod inpaint;
 mod selection;
 mod transport;

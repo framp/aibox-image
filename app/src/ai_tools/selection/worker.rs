@@ -1,18 +1,16 @@
-use std::{
-    path::PathBuf,
-    sync::mpsc::{self, Receiver, Sender},
-};
+use std::path::PathBuf;
+use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use image::{DynamicImage, GrayImage};
 use serde_bytes::ByteBuf;
 
-use crate::config::{ModelEntry, SelectionModel};
 use crate::{
     ai_tools::transport::{
         Transport,
         types::{ImageSelectionRequest, LoadRequest, ModelKind},
         zmq::ZmqTransport,
     },
+    config::{ModelEntry, SelectionModel},
     worker::WorkerTrait,
 };
 
@@ -33,8 +31,8 @@ impl WorkerTrait for Worker {
 
 impl Worker {
     pub fn new() -> Self {
-        let (tx_image, rx_image) = mpsc::channel();
-        let (tx_load, rx_load) = mpsc::channel();
+        let (tx_image, rx_image) = mpsc::channel(100);
+        let (tx_load, rx_load) = mpsc::channel(100);
 
         Self {
             client: ZmqTransport::new("tcp://127.0.0.1:5558"),
@@ -51,7 +49,7 @@ impl Worker {
         let prompt = prompt.to_owned();
         let client = self.client.clone();
 
-        self.run(self.tx_selections.clone(), move || {
+        self.run(self.tx_selections.clone(), move || async move {
             let mut image_buf = Vec::new();
             image
                 .write_to(
@@ -60,11 +58,13 @@ impl Worker {
                 )
                 .unwrap();
 
-            let response = client.send(ImageSelectionRequest {
-                prompt,
-                image_bytes: ByteBuf::from(image_buf),
-                threshold,
-            })?;
+            let response = client
+                .send(ImageSelectionRequest {
+                    prompt,
+                    image_bytes: ByteBuf::from(image_buf),
+                    threshold,
+                })
+                .await?;
 
             let selections = response
                 .masks
@@ -85,21 +85,23 @@ impl Worker {
         let cache_dir = cache_dir.to_str().unwrap().to_owned();
         let model = model.to_owned();
 
-        self.run(self.tx_load.clone(), move || {
-            client.send(LoadRequest {
-                model: ModelKind::Selection(model.kind),
-                cache_dir,
-            })?;
+        self.run(self.tx_load.clone(), move || async move {
+            client
+                .send(LoadRequest {
+                    model: ModelKind::Selection(model.kind),
+                    cache_dir,
+                })
+                .await?;
 
             Ok(model.name)
         });
     }
 
-    pub fn selections(&self) -> Option<Vec<GrayImage>> {
+    pub fn selections(&mut self) -> Option<Vec<GrayImage>> {
         self.rx_selections.try_recv().ok()
     }
 
-    pub fn model_loaded(&self) -> Option<String> {
+    pub fn model_loaded(&mut self) -> Option<String> {
         self.rx_load.try_recv().ok()
     }
 }

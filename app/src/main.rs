@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(rustdoc::missing_crate_level_docs)]
 
+use anyhow::Context;
 use eframe::egui;
 
 mod ai_tools;
@@ -11,27 +12,33 @@ mod worker;
 use ai_tools::ToolsPanel;
 use image_canvas::ImageCanvas;
 
-fn main() -> eframe::Result {
+fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    let config = config::load().expect("Failed to load config");
+    let config =
+        config::load().map_err(|e| anyhow::anyhow!("Failed to load application config: {}", e))?;
 
-    let options: eframe::NativeOptions = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1200.0, 800.0])
-            .with_min_inner_size([800.0, 600.0])
-            .with_drag_and_drop(true),
-        ..Default::default()
-    };
+    let rt = tokio::runtime::Runtime::new().context("Failed to create Tokio runtime")?;
 
-    eframe::run_native(
-        "AI Image Editor",
-        options,
-        Box::new(|cc| {
-            egui_extras::install_image_loaders(&cc.egui_ctx);
-            Ok(Box::new(ImageEditorApp::new(&config)))
-        }),
-    )
+    rt.block_on(async {
+        let options: eframe::NativeOptions = eframe::NativeOptions {
+            viewport: egui::ViewportBuilder::default()
+                .with_inner_size([1200.0, 800.0])
+                .with_min_inner_size([800.0, 600.0])
+                .with_drag_and_drop(true),
+            ..Default::default()
+        };
+
+        eframe::run_native(
+            "AI Image Editor",
+            options,
+            Box::new(|cc| {
+                egui_extras::install_image_loaders(&cc.egui_ctx);
+                Ok(Box::new(ImageEditorApp::new(&config)))
+            }),
+        )
+        .map_err(|e| anyhow::anyhow!("Failed to run eframe application: {:?}", e))
+    })
 }
 
 struct ImageEditorApp {
