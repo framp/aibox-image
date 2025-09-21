@@ -245,3 +245,67 @@ class FaceSwapper(FaceSwapperProtocol):
         except Exception as e:
             logging.error(f"Face swapping failed: {e}")
             return target_image
+
+    def analyze_faces_with_preview(self, source_image: Image.Image):
+        """Analyze faces in source image and return face info with preview"""
+        logging.info("Analyzing faces for preview...")
+
+        if self.face_analyser is None:
+            logging.error("Face analyzer not initialized")
+            return [], source_image
+
+        try:
+            # Convert PIL image to OpenCV format
+            source_cv = cv2.cvtColor(np.array(source_image), cv2.COLOR_RGB2BGR)
+
+            # Analyze faces
+            source_hash = get_image_md5hash(source_cv)
+            if source_hash not in self.source_faces_cache:
+                logging.info("Analyzing source image for preview...")
+                source_faces = analyze_faces(source_cv, face_analyser=self.face_analyser)
+                self.source_faces_cache[source_hash] = source_faces
+            else:
+                logging.info("Using cached source faces for preview...")
+                source_faces = self.source_faces_cache[source_hash]
+
+            if not source_faces:
+                logging.warning("No faces found in source image")
+                return [], source_image
+
+            # Sort faces by size (largest first)
+            sorted_faces = sort_faces_by_order(source_faces, "large-small")
+
+            # Create preview image with face bounding boxes
+            preview_cv = source_cv.copy()
+            faces_info = []
+
+            for i, face in enumerate(sorted_faces):
+                # Get bounding box coordinates
+                bbox = face.bbox.astype(int)
+                x1, y1, x2, y2 = bbox
+
+                # Draw bounding box
+                color = (0, 255, 0) if i == 0 else (255, 0, 0)  # Green for first face, red for others
+                cv2.rectangle(preview_cv, (x1, y1), (x2, y2), color, 2)
+
+                # Add face index label
+                cv2.putText(preview_cv, f"Face {i}", (x1, y1 - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+
+                # Store face info
+                faces_info.append({
+                    "index": i,
+                    "bbox": [int(x1), int(y1), int(x2), int(y2)],
+                    "confidence": float(face.det_score),
+                    "is_primary": i == 0
+                })
+
+            # Convert back to PIL Image
+            preview_image = Image.fromarray(cv2.cvtColor(preview_cv, cv2.COLOR_BGR2RGB))
+
+            logging.info(f"Found {len(sorted_faces)} faces in source image")
+            return faces_info, preview_image
+
+        except Exception as e:
+            logging.error(f"Face analysis failed: {e}")
+            return [], source_image

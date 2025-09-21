@@ -46,3 +46,9 @@ class Service:
             raise Exception("Service is not healthy")
 
         return self.model.swap_face(source_image, target_image, face_index)
+
+    def analyze_faces_with_preview(self, source_image: Image.Image):
+        if not self.health():
+            raise Exception("Service is not healthy")
+
+        return self.model.analyze_faces_with_preview(source_image)

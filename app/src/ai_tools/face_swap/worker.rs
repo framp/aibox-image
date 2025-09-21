@@ -9,7 +9,7 @@ use crate::{
         error::WorkerError,
         transport::{
             Transport,
-            types::{FaceSwapRequest, LoadRequest, ModelKind},
+            types::{AnalyzeFacesRequest, AnalyzeFacesResponse, FaceSwapRequest, LoadRequest, ModelKind},
             zmq::ZmqTransport,
         },
     },
@@ -23,6 +23,8 @@ pub struct Worker {
     rx_image: Receiver<DynamicImage>,
     tx_load: Sender<()>,
     rx_load: Receiver<()>,
+    tx_faces: Sender<AnalyzeFacesResponse>,
+    rx_faces: Receiver<AnalyzeFacesResponse>,
     active_jobs: std::sync::Arc<std::sync::Mutex<usize>>,
 }
 
@@ -36,6 +38,7 @@ impl Worker {
     pub fn new() -> Self {
         let (tx_image, rx_image) = mpsc::channel(100);
         let (tx_load, rx_load) = mpsc::channel(100);
+        let (tx_faces, rx_faces) = mpsc::channel(100);
 
         Self {
             transport: ZmqTransport::new("tcp://127.0.0.1:5562"),
@@ -43,6 +46,8 @@ impl Worker {
             rx_image,
             tx_load,
             rx_load,
+            tx_faces,
+            rx_faces,
             active_jobs: std::sync::Arc::new(std::sync::Mutex::new(0)),
         }
     }
@@ -109,6 +114,34 @@ impl Worker {
 
     pub fn swapped(&mut self) -> Option<DynamicImage> {
         self.rx_image.try_recv().ok()
+    }
+
+    pub fn analyze_faces(&self, image: &DynamicImage) {
+        let image = image.clone();
+        let client = self.transport.clone();
+
+        self.run(self.tx_faces.clone(), move || async move {
+            let mut image_buf = Vec::new();
+            image
+                .write_to(
+                    &mut std::io::Cursor::new(&mut image_buf),
+                    image::ImageFormat::Png,
+                )
+                .map_err(WorkerError::ImageError)?;
+
+            let response = client
+                .send(AnalyzeFacesRequest {
+                    image_bytes: ByteBuf::from(image_buf),
+                })
+                .await
+                .map_err(WorkerError::Transport)?;
+
+            Ok(response)
+        });
+    }
+
+    pub fn faces_analyzed(&mut self) -> Option<AnalyzeFacesResponse> {
+        self.rx_faces.try_recv().ok()
     }
 
     pub fn loaded(&mut self) -> bool {
