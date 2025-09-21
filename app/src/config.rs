@@ -60,10 +60,12 @@ pub enum PortraitEditingModel {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum FaceSwappingModel {
-    #[serde(rename = "insightface")]
-    InsightFace {
+    #[serde(rename = "face_swapping")]
+    FaceSwapping {
         #[serde(default)]
-        model_or_checkpoint: String
+        insightface_model: String,
+        #[serde(default)]
+        inswapper_model: String,
     },
 }
 

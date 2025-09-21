@@ -119,10 +119,11 @@ def download_inswapper_model(cache_dir: Path) -> str:
 
 
 class FaceSwapper(FaceSwapperProtocol):
-    def __init__(self, cache_dir: Path, model_or_checkpoint: str):
-        logging.info(f"Initializing face swapper with model: {model_or_checkpoint}")
+    def __init__(self, cache_dir: Path, insightface_model: str = "", inswapper_model: str = ""):
+        logging.info(f"Initializing face swapper with insightface: {insightface_model}, inswapper: {inswapper_model}")
         self.cache_dir = cache_dir
-        self.model_or_checkpoint = model_or_checkpoint
+        self.insightface_model = insightface_model
+        self.inswapper_model = inswapper_model
 
         # Initialize providers
         self.providers = get_providers()
@@ -154,25 +155,25 @@ class FaceSwapper(FaceSwapperProtocol):
             )
             self.face_analyser.prepare(ctx_id=0, det_size=(640, 640))
 
-            # Initialize face swapper model
-            model_path = self.model_or_checkpoint
+            # Initialize face swapper model (Inswapper)
+            inswapper_path = self.inswapper_model
 
-            if not model_path or not os.path.exists(model_path):
-                logging.info("Face swapper model not found locally, downloading from Hugging Face...")
+            if not inswapper_path or not os.path.exists(inswapper_path):
+                logging.info("Inswapper model not found locally, downloading from Hugging Face...")
                 try:
-                    model_path = download_inswapper_model(self.cache_dir)
+                    inswapper_path = download_inswapper_model(self.cache_dir)
                 except Exception as e:
-                    logging.error(f"Failed to download model: {e}")
-                    model_path = None
+                    logging.error(f"Failed to download inswapper model: {e}")
+                    inswapper_path = None
 
-            if model_path and os.path.exists(model_path):
-                logging.info(f"Loading face swapper model from: {model_path}")
+            if inswapper_path and os.path.exists(inswapper_path):
+                logging.info(f"Loading inswapper model from: {inswapper_path}")
                 self.face_swapper_model = insightface.model_zoo.get_model(
-                    model_path,
+                    inswapper_path,
                     providers=self.providers
                 )
             else:
-                logging.warning("Face swapper model not found or could not be downloaded")
+                logging.warning("Inswapper model not found or could not be downloaded")
 
         except Exception as e:
             logging.error(f"Failed to initialize models: {e}")

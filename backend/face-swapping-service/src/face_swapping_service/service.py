@@ -8,13 +8,14 @@ from pydantic import BaseModel
 from face_swapping_service.face_swapping import FaceSwapper
 
 
-class InsightFaceParams(BaseModel):
-    type: Literal["insightface"]
-    model_or_checkpoint: str = ""
+class FaceSwappingParams(BaseModel):
+    type: Literal["face_swapping"]
+    insightface_model: str = ""
+    inswapper_model: str = ""
     cache_dir: Path
 
 
-LoadParams = InsightFaceParams
+LoadParams = FaceSwappingParams
 
 
 class Service:
@@ -27,10 +28,11 @@ class Service:
 
         try:
             match params.type:
-                case "insightface":
+                case "face_swapping":
                     self.model = FaceSwapper(
                         cache_dir=params.cache_dir,
-                        model_or_checkpoint=params.model_or_checkpoint,
+                        insightface_model=params.insightface_model,
+                        inswapper_model=params.inswapper_model,
                     )
         except Exception:
             logging.warning("Could not load LLM model", exc_info=True)
