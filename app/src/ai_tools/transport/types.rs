@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
+use std::collections::HashMap;
 
 use super::IntoResponse;
-use crate::config::{InpaintingModel, SelectionModel, UpscalingModel};
+use crate::config::{InpaintingModel, PortraitEditingModel, SelectionModel, UpscalingModel};
 
 #[derive(Serialize, Debug)]
 #[serde(tag = "action", rename_all = "snake_case")]
@@ -10,6 +11,7 @@ pub enum Request {
     ImageSelection(ImageSelectionRequest),
     Inpaint(InpaintRequest),
     Upscale(UpscaleRequest),
+    EditExpression(EditExpressionRequest),
     Load(LoadRequest),
 }
 
@@ -82,11 +84,34 @@ pub struct UpscaleResponse {
 }
 
 #[derive(Serialize, Debug)]
+pub struct EditExpressionRequest {
+    pub image_bytes: ByteBuf,
+    pub expression_params: HashMap<String, f64>,
+}
+
+impl IntoResponse for EditExpressionRequest {
+    type Response = EditExpressionResponse;
+}
+
+impl Into<Request> for EditExpressionRequest {
+    fn into(self) -> Request {
+        Request::EditExpression(self)
+    }
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct EditExpressionResponse {
+    pub image: ByteBuf,
+}
+
+#[derive(Serialize, Debug)]
 #[serde(untagged)]
 pub enum ModelKind {
     Selection(SelectionModel),
     Inpainting(InpaintingModel),
     Upscaling(UpscalingModel),
+    PortraitEditing(PortraitEditingModel),
 }
 
 #[derive(Serialize, Debug)]

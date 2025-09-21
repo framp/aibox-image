@@ -3,6 +3,7 @@ use eframe::egui::Ui;
 use crate::{config::Config, image_canvas::ImageCanvas};
 
 mod inpaint;
+mod portrait;
 mod selection;
 mod transport;
 mod upscale;
@@ -23,6 +24,7 @@ impl ToolsPanel {
         tools.push(Box::new(selection::SelectionTool::new(&config)) as Box<dyn Tool>);
         tools.push(Box::new(inpaint::InpaintTool::new(&config)) as Box<dyn Tool>);
         tools.push(Box::new(upscale::UpscaleTool::new(&config)) as Box<dyn Tool>);
+        tools.push(Box::new(portrait::PortraitTool::new(&config)) as Box<dyn Tool>);
 
         Self { tools }
     }

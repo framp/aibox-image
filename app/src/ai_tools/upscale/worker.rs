@@ -13,6 +13,7 @@ use crate::{
         zmq::ZmqTransport,
     },
     config::UpscalingModel,
+    worker::WorkerTrait,
 };
 
 pub struct Worker {
@@ -21,6 +22,13 @@ pub struct Worker {
     rx_image: Receiver<DynamicImage>,
     tx_load: Sender<()>,
     rx_load: Receiver<()>,
+    active_jobs: std::sync::Arc<std::sync::Mutex<usize>>,
+}
+
+impl WorkerTrait for Worker {
+    fn active_jobs(&self) -> std::sync::Arc<std::sync::Mutex<usize>> {
+        self.active_jobs.clone()
+    }
 }
 
 impl Worker {
@@ -34,6 +42,7 @@ impl Worker {
             rx_image,
             tx_load,
             rx_load,
+            active_jobs: std::sync::Arc::new(std::sync::Mutex::new(0)),
         }
     }
 
@@ -42,7 +51,7 @@ impl Worker {
         let prompt = prompt.to_owned();
         let client = self.transport.clone();
 
-        crate::worker::run(self.tx_image.clone(), move || {
+        self.run(self.tx_image.clone(), move || {
             let mut image_buf = Vec::new();
             image
                 .write_to(
@@ -67,7 +76,7 @@ impl Worker {
         let client = self.transport.clone();
         let cache_dir = cache_dir.to_str().unwrap().to_owned();
 
-        crate::worker::run(self.tx_load.clone(), move || {
+        self.run(self.tx_load.clone(), move || {
             client.send(LoadRequest {
                 model: ModelKind::Upscaling(kind),
                 cache_dir,
