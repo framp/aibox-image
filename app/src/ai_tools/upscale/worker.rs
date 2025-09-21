@@ -1,16 +1,17 @@
-use std::{
-    path::PathBuf,
-    sync::mpsc::{self, Receiver, Sender},
-};
+use std::path::PathBuf;
 
 use image::DynamicImage;
 use serde_bytes::ByteBuf;
+use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use crate::{
-    ai_tools::transport::{
-        Transport,
-        types::{LoadRequest, ModelKind, UpscaleRequest},
-        zmq::ZmqTransport,
+    ai_tools::{
+        error::WorkerError,
+        transport::{
+            Transport,
+            types::{LoadRequest, ModelKind, UpscaleRequest},
+            zmq::ZmqTransport,
+        },
     },
     config::UpscalingModel,
     worker::WorkerTrait,
@@ -33,8 +34,8 @@ impl WorkerTrait for Worker {
 
 impl Worker {
     pub fn new() -> Self {
-        let (tx_image, rx_image) = mpsc::channel();
-        let (tx_load, rx_load) = mpsc::channel();
+        let (tx_image, rx_image) = mpsc::channel(100);
+        let (tx_load, rx_load) = mpsc::channel(100);
 
         Self {
             transport: ZmqTransport::new("tcp://127.0.0.1:5560"),
@@ -51,22 +52,25 @@ impl Worker {
         let prompt = prompt.to_owned();
         let client = self.transport.clone();
 
-        self.run(self.tx_image.clone(), move || {
+        self.run(self.tx_image.clone(), move || async move {
             let mut image_buf = Vec::new();
             image
                 .write_to(
                     &mut std::io::Cursor::new(&mut image_buf),
                     image::ImageFormat::Png,
                 )
-                .unwrap();
+                .map_err(WorkerError::ImageError)?;
 
-            let response = client.send(UpscaleRequest {
-                prompt: prompt,
-                image_bytes: ByteBuf::from(image_buf),
-            })?;
+            let response = client
+                .send(UpscaleRequest {
+                    prompt: prompt,
+                    image_bytes: ByteBuf::from(image_buf),
+                })
+                .await
+                .map_err(WorkerError::Transport)?;
 
-            let inpainted_image = image::load_from_memory(&response.image)
-                .map_err(|e| format!("Failed to load image from response: {}", e))?;
+            let inpainted_image =
+                image::load_from_memory(&response.image).map_err(WorkerError::ImageError)?;
 
             Ok(inpainted_image)
         });
@@ -76,21 +80,24 @@ impl Worker {
         let client = self.transport.clone();
         let cache_dir = cache_dir.to_str().unwrap().to_owned();
 
-        self.run(self.tx_load.clone(), move || {
-            client.send(LoadRequest {
-                model: ModelKind::Upscaling(kind),
-                cache_dir,
-            })?;
+        self.run(self.tx_load.clone(), move || async move {
+            client
+                .send(LoadRequest {
+                    model: ModelKind::Upscaling(kind),
+                    cache_dir,
+                })
+                .await
+                .map_err(WorkerError::Transport)?;
 
             Ok(())
         });
     }
 
-    pub fn upscaled(&self) -> Option<DynamicImage> {
+    pub fn upscaled(&mut self) -> Option<DynamicImage> {
         self.rx_image.try_recv().ok()
     }
 
-    pub fn loaded(&self) -> bool {
+    pub fn loaded(&mut self) -> bool {
         self.rx_load.try_recv().is_ok()
     }
 }

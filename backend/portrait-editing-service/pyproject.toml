@@ -2,24 +2,15 @@
 name = "portrait-editing-service"
 version = "0.1.0"
 description = "portrait editing service"
-requires-python = ">=3.9,<3.12"
+requires-python = ">=3.10,<3.12"
 dependencies = [
     "aibox-image-lib",
-    "pyzmq>=25.0.0",
-    "msgpack>=1.0.0",
-    "zmq>=0.0.0",
+    "liveportrait",
+    "onnxruntime==1.18.0",
+    "onnxruntime-gpu==1.18.0",
     "torch>=2.8.0",
-    "pillow>=11.3.0",
-    "opencv-python>=4.11.0.86",
     "torchvision>=0.23.0",
-    "transformers>=4.56.1",
-    "accelerate>=1.10.1",
-    "ultralytics>=8.0.0",
-    "scipy>=1.11.0",
-    "numpy>=1.24.0",
-    "onnxruntime>=1.18.0",
-    "insightface>=0.7.3",
-    "huggingface_hub>=0.20.0",
+    "zmq>=0.0.0",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +18,7 @@ dev = ["pytest>=7.0.0", "black>=23.0.0"]
 
 [tool.uv.sources]
 aibox-image-lib = { path = "../aibox-image-lib", editable = true }
+liveportrait = { git = "https://github.com/framp/LivePortrait.git" }
 
 [project.scripts]
 service = "portrait_editing_service.main:main"
