@@ -15,6 +15,7 @@ pub struct Models {
     pub selection: Vec<ModelEntry<SelectionModel>>,
     pub inpainting: Vec<ModelEntry<InpaintingModel>>,
     pub upscaling: Vec<ModelEntry<UpscalingModel>>,
+    pub portrait_editing: Vec<ModelEntry<PortraitEditingModel>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -46,6 +47,13 @@ pub enum InpaintingModel {
 pub enum UpscalingModel {
     #[serde(rename = "stable_diffusion")]
     StableDiffusion { model_or_checkpoint: String },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum PortraitEditingModel {
+    #[serde(rename = "liveportrait")]
+    LivePortrait,
 }
 
 pub fn load() -> Result<Config, Box<dyn std::error::Error>> {
