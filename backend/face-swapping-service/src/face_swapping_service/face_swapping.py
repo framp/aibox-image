@@ -1,16 +1,18 @@
+import hashlib
 import logging
 import os
-import hashlib
 from pathlib import Path
-from typing import Protocol, Optional, List, Union
+from typing import List, Optional, Protocol, Union
 
 import cv2
-import numpy as np
-from PIL import Image
 import insightface
-from insightface.app.common import Face
+import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
+from insightface.app.common import Face
+from insightface.utils import face_align
+from PIL import Image
+from gfpgan import GFPGANer
 
 
 class FaceSwapperProtocol(Protocol):
@@ -117,6 +119,32 @@ def download_inswapper_model(cache_dir: Path) -> str:
         logging.error(f"Failed to download model from Hugging Face: {e}")
         raise
 
+def download_gfpgan_model(cache_dir: Path) -> str:
+    """Download GFPGANv1.4.pth model from Hugging Face"""
+    model_filename = "GFPGANv1.4.pth"
+    model_path = cache_dir / "gfpgan" / model_filename
+
+    if model_path.exists():
+        logging.info(f"GFPGAN model already exists at: {model_path}")
+        return str(model_path)
+
+    logging.info("Downloading GFPGANv1.4.pth from Hugging Face...")
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        downloaded_path = hf_hub_download(
+            repo_id="gmk123/GFPGAN",
+            filename=model_filename,
+            cache_dir=str(cache_dir / "huggingface"),
+            local_dir=str(model_path.parent),
+            local_dir_use_symlinks=False
+        )
+        logging.info(f"Successfully downloaded GFPGAN model to: {downloaded_path}")
+        return downloaded_path
+    except Exception as e:
+        logging.error(f"Failed to download GFPGAN model from Hugging Face: {e}")
+        raise
+
 
 class FaceSwapper(FaceSwapperProtocol):
     def __init__(self, cache_dir: Path, insightface_model: str = "", inswapper_model: str = ""):
@@ -174,6 +202,14 @@ class FaceSwapper(FaceSwapperProtocol):
                 )
             else:
                 logging.warning("Inswapper model not found or could not be downloaded")
+
+            self.gfpgan_model = GFPGANer(
+                model_path = download_gfpgan_model(self.cache_dir),
+                upscale=1,        # keep size, just enhance quality
+                arch='clean',
+                channel_multiplier=2,
+                bg_upsampler=None
+            )
 
         except Exception as e:
             logging.error(f"Failed to initialize models: {e}")
@@ -233,13 +269,50 @@ class FaceSwapper(FaceSwapperProtocol):
                 logging.warning(f"Could not get target face at index {face_index}")
                 return target_image
 
-            # Perform face swapping
+            # Optional: align
+            source_aligned = face_align.norm_crop(source_cv, source_face.kps, image_size=128)
+            target_aligned = face_align.norm_crop(target_cv, target_face.kps, image_size=128)
+
+            aligned_dir = self.cache_dir / "aligned_faces"
+            aligned_dir.mkdir(parents=True, exist_ok=True)
+
+            # Save as PNG
+            cv2.imwrite(str(aligned_dir / "source_aligned.png"), source_aligned)
+            cv2.imwrite(str(aligned_dir / f"target_aligned_{face_index}.png"), target_aligned)
+
+            # Perform face swapping with paste_back=True (full-frame compositing)
             logging.info("Performing face swap...")
-            result_cv = self.face_swapper_model.get(target_cv, target_face, source_face)
+            result_cv = self.face_swapper_model.get(
+                target_cv,
+                target_face,
+                source_face,
+                paste_back=True
+            )
+
+            cropped_faces, restored_faces, restored_img = self.gfpgan_model.enhance(
+                result_cv,
+                has_aligned=False,
+                paste_back=True,
+                weight=0.5
+            )
+
+            # Use restored_img as the final output
+            if restored_img is None:
+                # fallback: take first restored face
+                result_enhanced = restored_faces[0]
+            else:
+                result_enhanced = restored_img
+
+            # Ensure uint8
+            if result_enhanced.dtype != np.uint8:
+                if result_enhanced.max() <= 1.0:
+                    result_enhanced = (result_enhanced * 255).astype(np.uint8)
+                else:
+                    result_enhanced = result_enhanced.astype(np.uint8)
 
             # Convert result back to PIL Image
-            result_image = Image.fromarray(cv2.cvtColor(result_cv, cv2.COLOR_BGR2RGB))
-
+            result_image = Image.fromarray(cv2.cvtColor(result_enhanced, cv2.COLOR_BGR2RGB))
+            
             logging.info("Face swap completed successfully")
             return result_image
 
