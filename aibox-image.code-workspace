@@ -6,6 +6,7 @@
     { "path": "backend/inpainting-service" },
     { "path": "backend/selection-service" },
     { "path": "backend/upscaling-service" }
+    { "path": "backend/portrait-editing-service" }
   ],
   "settings": {
     "ruff.interpreter": [
