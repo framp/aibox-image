@@ -185,6 +185,10 @@ impl SelectionTool {
 }
 
 impl super::Tool for SelectionTool {
+    fn name(&self) -> &str {
+        "Selection"
+    }
+
     fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
         ui.push_id("selection", |ui| {
             ui.label("Selection Tool");
