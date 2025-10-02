@@ -25,36 +25,10 @@ const TOAST_DURATION: Duration = Duration::from_secs(5);
 
 impl MsgPanel {
     pub fn new() -> Self {
-        let mut errors = Vec::new();
         let (tx_error, rx_error) = tokio::sync::mpsc::channel(100);
 
-        errors.push(Message {
-            kind: MessageKind::Error(anyhow!("aaaaa").into()),
-            timestamp: Instant::now(),
-        });
-        errors.push(Message {
-            kind: MessageKind::Error(anyhow!("aaaaa").into()),
-            timestamp: Instant::now(),
-        });
-        errors.push(Message {
-            kind: MessageKind::Error(anyhow!("aaaaa").into()),
-            timestamp: Instant::now(),
-        });
-        errors.push(Message {
-            kind: MessageKind::Error(anyhow!("aaaaa").into()),
-            timestamp: Instant::now(),
-        });
-        errors.push(Message {
-            kind: MessageKind::Error(anyhow!("aaaaa").into()),
-            timestamp: Instant::now(),
-        });
-        errors.push(Message {
-            kind: MessageKind::Error(anyhow!("aaaaa").into()),
-            timestamp: Instant::now(),
-        });
-
         Self {
-            errors,
+            errors: Vec::new(),
             rx_error,
             tx_error,
             show_modal: false,
