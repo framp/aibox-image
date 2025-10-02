@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 use config::{Config as ConfigTrait, File, FileFormat};
 use serde::{Deserialize, Deserializer, Serialize, de};
@@ -70,8 +70,14 @@ pub enum FaceSwappingModel {
 }
 
 pub fn load() -> Result<Config, Box<dyn std::error::Error>> {
+    let exe_path = env::current_exe()?;
+    let exe_dir = exe_path.parent().unwrap();
+
+    // Base config path relative to the exe
+    let config_path = exe_dir.join("config.toml");
+
     let config = ConfigTrait::builder()
-        .add_source(File::with_name("config").format(FileFormat::Toml))
+        .add_source(File::from(config_path).format(FileFormat::Toml))
         .add_source(
             File::with_name("config.override")
                 .format(FileFormat::Toml)

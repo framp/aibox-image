@@ -20,6 +20,7 @@ dependencies = [
     "onnxruntime>=1.18.0",
     "insightface>=0.7.3",
     "huggingface_hub>=0.20.0",
+    "pyinstaller>=6.16.0",
 ]
 
 [project.optional-dependencies]

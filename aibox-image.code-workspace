@@ -2,11 +2,12 @@
   "folders": [
     { "path": ".", "name": "root" },
     { "path": "app" },
+    { "path": "launcher" },
     { "path": "backend/aibox-image-lib" },
     { "path": "backend/inpainting-service" },
     { "path": "backend/selection-service" },
-    { "path": "backend/upscaling-service" }
-    { "path": "backend/portrait-editing-service" }
+    { "path": "backend/upscaling-service" },
+    { "path": "backend/portrait-editing-service" },
     { "path": "backend/face-swapping-service" }
   ],
   "settings": {
