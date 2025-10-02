@@ -5,13 +5,17 @@ use image::{DynamicImage, GrayImage, Luma};
 use serde_bytes::ByteBuf;
 
 use crate::{
-    ai_tools::transport::{
-        Transport,
-        types::{InpaintRequest, LoadRequest, ModelKind},
-        zmq::ZmqTransport,
+    ai_tools::{
+        error::AiToolError,
+        transport::{
+            Transport,
+            types::{InpaintRequest, LoadRequest, ModelKind},
+            zmq::ZmqTransport,
+        },
     },
     config::{InpaintingModel, ModelEntry},
-    worker::WorkerTrait,
+    error::Error,
+    worker::{ErrorChan, WorkerTrait},
 };
 
 pub struct Worker {
@@ -20,6 +24,7 @@ pub struct Worker {
     rx_image: Receiver<DynamicImage>,
     tx_load: Sender<String>,
     rx_load: Receiver<String>,
+    tx_err: ErrorChan,
     active_jobs: std::sync::Arc<std::sync::Mutex<usize>>,
 }
 
@@ -30,7 +35,7 @@ impl WorkerTrait for Worker {
 }
 
 impl Worker {
-    pub fn new() -> Self {
+    pub fn new(tx_err: ErrorChan) -> Self {
         let (tx_image, rx_image) = mpsc::channel(100);
         let (tx_load, rx_load) = mpsc::channel(100);
 
@@ -40,6 +45,7 @@ impl Worker {
             rx_image,
             tx_load,
             rx_load,
+            tx_err,
             active_jobs: std::sync::Arc::new(std::sync::Mutex::new(0)),
         }
     }
@@ -49,32 +55,38 @@ impl Worker {
         let prompt = prompt.to_owned();
         let client = self.transport.clone();
 
-        self.run(self.tx_image.clone(), move || async move {
-            let mask = merge_masks(&masks);
-            let mut mask_buf = Vec::new();
-            mask.write_to(&mut Cursor::new(&mut mask_buf), image::ImageFormat::Png)
-                .unwrap();
+        self.run(
+            self.tx_image.clone(),
+            self.tx_err.clone(),
+            move || async move {
+                let mask = merge_masks(&masks);
+                let mut mask_buf = Vec::new();
+                mask.write_to(&mut Cursor::new(&mut mask_buf), image::ImageFormat::Png)
+                    .map_err(AiToolError::from)?;
 
-            let mut image_buf = Vec::new();
-            image
-                .write_to(
-                    &mut std::io::Cursor::new(&mut image_buf),
-                    image::ImageFormat::Png,
-                )
-                .unwrap();
+                let mut image_buf = Vec::new();
+                image
+                    .write_to(
+                        &mut std::io::Cursor::new(&mut image_buf),
+                        image::ImageFormat::Png,
+                    )
+                    .map_err(AiToolError::from)?;
 
-            let response = client
-                .send(InpaintRequest {
-                    prompt: prompt,
-                    image_bytes: ByteBuf::from(image_buf),
-                    mask: ByteBuf::from(mask_buf),
-                })
-                .await?;
+                let response = client
+                    .send(InpaintRequest {
+                        prompt: prompt,
+                        image_bytes: ByteBuf::from(image_buf),
+                        mask: ByteBuf::from(mask_buf),
+                    })
+                    .await
+                    .map_err(AiToolError::from)?;
 
-            let inpainted_image = image::load_from_memory(&response.image)?;
+                let inpainted_image =
+                    image::load_from_memory(&response.image).map_err(AiToolError::from)?;
 
-            Ok(inpainted_image)
-        });
+                Ok(inpainted_image)
+            },
+        );
     }
 
     pub fn load_model(&self, model: &ModelEntry<InpaintingModel>, cache_dir: &PathBuf) {
@@ -82,16 +94,21 @@ impl Worker {
         let cache_dir = cache_dir.to_str().unwrap().to_owned();
         let model = model.clone();
 
-        self.run(self.tx_load.clone(), move || async move {
-            client
-                .send(LoadRequest {
-                    model: ModelKind::Inpainting(model.kind),
-                    cache_dir,
-                })
-                .await?;
+        self.run(
+            self.tx_load.clone(),
+            self.tx_err.clone(),
+            move || async move {
+                client
+                    .send(LoadRequest {
+                        model: ModelKind::Inpainting(model.kind),
+                        cache_dir,
+                    })
+                    .await
+                    .map_err(AiToolError::from)?;
 
-            Ok(model.name)
-        });
+                Ok(model.name)
+            },
+        );
     }
 
     pub fn inpainted(&mut self) -> Option<DynamicImage> {

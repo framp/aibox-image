@@ -1,6 +1,12 @@
 use eframe::egui::{Button, ComboBox, TextEdit, Ui};
+use tokio::sync::mpsc::Sender;
 
-use crate::{config::Config, image_canvas::ImageCanvas, worker::WorkerTrait};
+use crate::{
+    config::Config,
+    error::Error,
+    image_canvas::ImageCanvas,
+    worker::{ErrorChan, WorkerTrait},
+};
 
 mod worker;
 
@@ -14,10 +20,10 @@ pub struct InpaintTool {
 }
 
 impl InpaintTool {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config, tx_err: ErrorChan) -> Self {
         let tool = Self {
             input: String::new(),
-            worker: worker::Worker::new(),
+            worker: worker::Worker::new(tx_err),
             config: config.clone(),
             selected_model: None,
         };

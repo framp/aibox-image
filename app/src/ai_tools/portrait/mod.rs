@@ -1,7 +1,9 @@
 use eframe::egui::{Button, CollapsingHeader, ComboBox, DragValue, Ui};
+use tokio::sync::mpsc::Sender;
 
 use crate::{
-    ai_tools::transport::types::ExpressionParams, config::Config, image_canvas::ImageCanvas,
+    ai_tools::transport::types::ExpressionParams, config::Config, error::Error,
+    image_canvas::ImageCanvas, worker::ErrorChan,
 };
 
 mod worker;
@@ -31,10 +33,10 @@ pub struct PortraitTool {
 }
 
 impl PortraitTool {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config, tx_err: ErrorChan) -> Self {
         let mut tool = Self {
             loading: false,
-            worker: worker::Worker::new(),
+            worker: worker::Worker::new(tx_err),
             config: config.clone(),
             selected_model: None,
             loading_model: None,

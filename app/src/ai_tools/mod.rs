@@ -1,6 +1,7 @@
 use eframe::egui::Ui;
+use tokio::sync::mpsc::Sender;
 
-use crate::{config::Config, image_canvas::ImageCanvas};
+use crate::{config::Config, error::Error, image_canvas::ImageCanvas, worker::ErrorChan};
 
 pub mod error;
 mod face_swap;
@@ -20,14 +21,17 @@ pub struct ToolsPanel {
 }
 
 impl ToolsPanel {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config, tx_err: ErrorChan) -> Self {
         let mut tools = Vec::new();
 
-        tools.push(Box::new(selection::SelectionTool::new(&config)) as Box<dyn Tool>);
-        tools.push(Box::new(inpaint::InpaintTool::new(&config)) as Box<dyn Tool>);
-        tools.push(Box::new(upscale::UpscaleTool::new(&config)) as Box<dyn Tool>);
-        tools.push(Box::new(portrait::PortraitTool::new(&config)) as Box<dyn Tool>);
-        tools.push(Box::new(face_swap::FaceSwapTool::new(&config)) as Box<dyn Tool>);
+        tools.push(
+            Box::new(selection::SelectionTool::new(&config, tx_err.clone())) as Box<dyn Tool>,
+        );
+        tools.push(Box::new(inpaint::InpaintTool::new(&config, tx_err.clone())) as Box<dyn Tool>);
+        tools.push(Box::new(upscale::UpscaleTool::new(&config, tx_err.clone())) as Box<dyn Tool>);
+        tools.push(Box::new(portrait::PortraitTool::new(&config, tx_err.clone())) as Box<dyn Tool>);
+        tools
+            .push(Box::new(face_swap::FaceSwapTool::new(&config, tx_err.clone())) as Box<dyn Tool>);
 
         Self { tools }
     }

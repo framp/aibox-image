@@ -1,6 +1,7 @@
 use eframe::egui::{Button, ComboBox, Ui};
+use tokio::sync::mpsc::Sender;
 
-use crate::{config::Config, image_canvas::ImageCanvas};
+use crate::{config::Config, error::Error, image_canvas::ImageCanvas, worker::ErrorChan};
 
 mod worker;
 
@@ -13,10 +14,10 @@ pub struct UpscaleTool {
 }
 
 impl UpscaleTool {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config, tx_err: ErrorChan) -> Self {
         let mut tool = Self {
             loading: false,
-            worker: worker::Worker::new(),
+            worker: worker::Worker::new(tx_err),
             config: config.clone(),
             selected_model: None,
         };

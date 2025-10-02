@@ -1,8 +1,9 @@
-use std::error::Error;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::Sender;
 
-use crate::ai_tools::error::WorkerError;
+use crate::error::Error;
+
+pub type ErrorChan = Sender<Error>;
 
 pub trait WorkerTrait {
     fn active_jobs(&self) -> Arc<Mutex<usize>>;
@@ -13,11 +14,11 @@ pub trait WorkerTrait {
         *count > 0
     }
 
-    fn run<T, F, Fut>(&self, sender: Sender<T>, f: F)
+    fn run<T, F, Fut>(&self, sender: Sender<T>, error: ErrorChan, f: F)
     where
         T: Send + 'static,
         F: FnOnce() -> Fut + Send + 'static,
-        Fut: std::future::Future<Output = Result<T, WorkerError>> + Send + 'static,
+        Fut: std::future::Future<Output = Result<T, Error>> + Send + 'static,
     {
         let jobs = self.active_jobs();
 
@@ -32,10 +33,7 @@ pub trait WorkerTrait {
                     let _ = sender.send(value).await;
                 }
                 Err(err) => {
-                    eprintln!("Worker job failed with error: {err:?}");
-                    if let Some(source) = err.source() {
-                        eprintln!("  Caused by: {source:?}");
-                    }
+                    let _ = error.send(err).await;
                 }
             }
 

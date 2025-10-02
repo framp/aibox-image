@@ -5,13 +5,17 @@ use image::{DynamicImage, GrayImage};
 use serde_bytes::ByteBuf;
 
 use crate::{
-    ai_tools::transport::{
-        Transport,
-        types::{ImageSelectionRequest, LoadRequest, ModelKind},
-        zmq::ZmqTransport,
+    ai_tools::{
+        error::AiToolError,
+        transport::{
+            Transport,
+            types::{ImageSelectionRequest, LoadRequest, ModelKind},
+            zmq::ZmqTransport,
+        },
     },
     config::{ModelEntry, SelectionModel},
-    worker::WorkerTrait,
+    error::Error,
+    worker::{ErrorChan, WorkerTrait},
 };
 
 pub struct Worker {
@@ -20,6 +24,7 @@ pub struct Worker {
     rx_selections: Receiver<Vec<GrayImage>>,
     tx_load: Sender<String>,
     rx_load: Receiver<String>,
+    tx_err: ErrorChan,
     active_jobs: std::sync::Arc<std::sync::Mutex<usize>>,
 }
 
@@ -30,7 +35,7 @@ impl WorkerTrait for Worker {
 }
 
 impl Worker {
-    pub fn new() -> Self {
+    pub fn new(tx_err: ErrorChan) -> Self {
         let (tx_image, rx_image) = mpsc::channel(100);
         let (tx_load, rx_load) = mpsc::channel(100);
 
@@ -40,6 +45,7 @@ impl Worker {
             rx_selections: rx_image,
             tx_load,
             rx_load,
+            tx_err,
             active_jobs: std::sync::Arc::new(std::sync::Mutex::new(0)),
         }
     }
@@ -49,35 +55,40 @@ impl Worker {
         let prompt = prompt.to_owned();
         let client = self.client.clone();
 
-        self.run(self.tx_selections.clone(), move || async move {
-            let mut image_buf = Vec::new();
-            image
-                .write_to(
-                    &mut std::io::Cursor::new(&mut image_buf),
-                    image::ImageFormat::Png,
-                )
-                .unwrap();
+        self.run(
+            self.tx_selections.clone(),
+            self.tx_err.clone(),
+            move || async move {
+                let mut image_buf = Vec::new();
+                image
+                    .write_to(
+                        &mut std::io::Cursor::new(&mut image_buf),
+                        image::ImageFormat::Png,
+                    )
+                    .map_err(AiToolError::from)?;
 
-            let response = client
-                .send(ImageSelectionRequest {
-                    prompt,
-                    image_bytes: ByteBuf::from(image_buf),
-                    threshold,
-                })
-                .await?;
+                let response = client
+                    .send(ImageSelectionRequest {
+                        prompt,
+                        image_bytes: ByteBuf::from(image_buf),
+                        threshold,
+                    })
+                    .await
+                    .map_err(AiToolError::from)?;
 
-            let selections = response
-                .masks
-                .into_iter()
-                .filter_map(|mask_bytes| {
-                    image::load_from_memory(&mask_bytes)
-                        .ok()
-                        .map(|img: DynamicImage| img.into_luma8())
-                })
-                .collect::<Vec<_>>();
+                let selections = response
+                    .masks
+                    .into_iter()
+                    .filter_map(|mask_bytes| {
+                        image::load_from_memory(&mask_bytes)
+                            .ok()
+                            .map(|img: DynamicImage| img.into_luma8())
+                    })
+                    .collect::<Vec<_>>();
 
-            Ok(selections)
-        });
+                Ok(selections)
+            },
+        );
     }
 
     pub fn load_model(&self, model: &ModelEntry<SelectionModel>, cache_dir: &PathBuf) {
@@ -85,16 +96,21 @@ impl Worker {
         let cache_dir = cache_dir.to_str().unwrap().to_owned();
         let model = model.to_owned();
 
-        self.run(self.tx_load.clone(), move || async move {
-            client
-                .send(LoadRequest {
-                    model: ModelKind::Selection(model.kind),
-                    cache_dir,
-                })
-                .await?;
+        self.run(
+            self.tx_load.clone(),
+            self.tx_err.clone(),
+            move || async move {
+                client
+                    .send(LoadRequest {
+                        model: ModelKind::Selection(model.kind),
+                        cache_dir,
+                    })
+                    .await
+                    .map_err(AiToolError::from)?;
 
-            Ok(model.name)
-        });
+                Ok(model.name)
+            },
+        );
     }
 
     pub fn selections(&mut self) -> Option<Vec<GrayImage>> {

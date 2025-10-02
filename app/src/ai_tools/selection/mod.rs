@@ -2,11 +2,13 @@ use eframe::egui::{
     Button, Checkbox, CollapsingHeader, ComboBox, DragValue, Image, Slider, TextEdit, Ui,
 };
 use image::{GrayImage, Luma};
+use tokio::sync::mpsc::Sender;
 
 use crate::{
     config::Config,
+    error::Error,
     image_canvas::{ImageCanvas, Selection},
-    worker::WorkerTrait,
+    worker::{ErrorChan, WorkerTrait},
 };
 
 mod worker;
@@ -20,11 +22,11 @@ pub struct SelectionTool {
 }
 
 impl SelectionTool {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config, tx_err: ErrorChan) -> Self {
         let tool = Self {
             input: String::new(),
             threshold: 0.5,
-            worker: worker::Worker::new(),
+            worker: worker::Worker::new(tx_err),
             config: config.clone(),
             selected_model: None,
         };

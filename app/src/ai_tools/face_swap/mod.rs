@@ -1,7 +1,8 @@
 use eframe::egui::{Button, ColorImage, ComboBox, Image, TextureHandle, Ui};
 use std::hash::{Hash, Hasher};
+use tokio::sync::mpsc::Sender;
 
-use crate::{config::Config, image_canvas::ImageCanvas};
+use crate::{config::Config, error::Error, image_canvas::ImageCanvas, worker::ErrorChan};
 
 mod worker;
 
@@ -22,12 +23,12 @@ pub struct FaceSwapTool {
 }
 
 impl FaceSwapTool {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config, tx_err: ErrorChan) -> Self {
         let mut tool = Self {
             loading: false,
             analyzing_faces_source: false,
             analyzing_faces_canvas: false,
-            worker: worker::Worker::new(),
+            worker: worker::Worker::new(tx_err),
             config: config.clone(),
             selected_model: None,
             source_image: None,
