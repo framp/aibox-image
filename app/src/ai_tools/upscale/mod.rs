@@ -1,6 +1,6 @@
 use eframe::egui::{Button, ComboBox, Ui};
 
-use crate::{config::Config, image_canvas::ImageCanvas};
+use crate::{config::Config, image_canvas::ImageCanvas, worker::ErrorChan};
 
 mod worker;
 
@@ -13,15 +13,15 @@ pub struct UpscaleTool {
 }
 
 impl UpscaleTool {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config, tx_err: ErrorChan) -> Self {
         let mut tool = Self {
             loading: false,
-            worker: worker::Worker::new(),
+            worker: worker::Worker::new(tx_err),
             config: config.clone(),
             selected_model: None,
         };
 
-        if let Some(first_model) = tool.config.models.upscaling.iter().next() {
+        if let Some(first_model) = tool.config.models.upscaling.first() {
             tool.loading = true;
             // load the first model immediately
             tool.worker

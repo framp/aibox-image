@@ -1,6 +1,6 @@
 use eframe::egui::Ui;
 
-use crate::{config::Config, image_canvas::ImageCanvas};
+use crate::{config::Config, image_canvas::ImageCanvas, worker::ErrorChan};
 
 pub mod error;
 mod face_swap;
@@ -20,14 +20,14 @@ pub struct ToolsPanel {
 }
 
 impl ToolsPanel {
-    pub fn new(config: &Config) -> Self {
-        let mut tools = Vec::new();
-
-        tools.push(Box::new(selection::SelectionTool::new(&config)) as Box<dyn Tool>);
-        tools.push(Box::new(inpaint::InpaintTool::new(&config)) as Box<dyn Tool>);
-        tools.push(Box::new(upscale::UpscaleTool::new(&config)) as Box<dyn Tool>);
-        tools.push(Box::new(portrait::PortraitTool::new(&config)) as Box<dyn Tool>);
-        tools.push(Box::new(face_swap::FaceSwapTool::new(&config)) as Box<dyn Tool>);
+    pub fn new(config: &Config, tx_err: ErrorChan) -> Self {
+        let tools = vec![
+            Box::new(selection::SelectionTool::new(config, tx_err.clone())) as Box<dyn Tool>,
+            Box::new(inpaint::InpaintTool::new(config, tx_err.clone())) as Box<dyn Tool>,
+            Box::new(upscale::UpscaleTool::new(config, tx_err.clone())) as Box<dyn Tool>,
+            Box::new(portrait::PortraitTool::new(config, tx_err.clone())) as Box<dyn Tool>,
+            Box::new(face_swap::FaceSwapTool::new(config, tx_err.clone())) as Box<dyn Tool>,
+        ];
 
         Self { tools }
     }
@@ -35,7 +35,7 @@ impl ToolsPanel {
     pub fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas, _has_image: bool) {
         ui.heading("🛠 Tools");
 
-        for (_i, tool) in self.tools.iter_mut().enumerate() {
+        for tool in self.tools.iter_mut() {
             ui.separator();
             ui.add_space(5.0);
             tool.show(ui, canvas);

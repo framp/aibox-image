@@ -1,7 +1,8 @@
 use eframe::egui::{Button, CollapsingHeader, ComboBox, DragValue, Ui};
 
 use crate::{
-    ai_tools::transport::types::ExpressionParams, config::Config, image_canvas::ImageCanvas,
+    ai_tools::transport::types::ExpressionParams, config::Config,
+    image_canvas::ImageCanvas, worker::ErrorChan,
 };
 
 mod worker;
@@ -31,10 +32,10 @@ pub struct PortraitTool {
 }
 
 impl PortraitTool {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config, tx_err: ErrorChan) -> Self {
         let mut tool = Self {
             loading: false,
-            worker: worker::Worker::new(),
+            worker: worker::Worker::new(tx_err),
             config: config.clone(),
             selected_model: None,
             loading_model: None,
@@ -54,7 +55,7 @@ impl PortraitTool {
             src_weight: 1.0,
         };
 
-        if let Some(first_model) = tool.config.models.portrait_editing.iter().next() {
+        if let Some(first_model) = tool.config.models.portrait_editing.first() {
             tool.loading = true;
             tool.loading_model = Some(first_model.name.clone());
             tool.worker

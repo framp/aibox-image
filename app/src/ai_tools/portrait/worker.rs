@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use image::DynamicImage;
 use serde_bytes::ByteBuf;
@@ -6,7 +6,7 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use crate::{
     ai_tools::{
-        error::WorkerError,
+        error::AiToolError,
         transport::{
             Transport,
             types::{EditExpressionRequest, ExpressionParams, LoadRequest, ModelKind},
@@ -14,7 +14,7 @@ use crate::{
         },
     },
     config::PortraitEditingModel,
-    worker::WorkerTrait,
+    worker::{ErrorChan, WorkerTrait},
 };
 
 pub struct Worker {
@@ -23,6 +23,7 @@ pub struct Worker {
     rx_image: Receiver<DynamicImage>,
     tx_load: Sender<()>,
     rx_load: Receiver<()>,
+    tx_err: ErrorChan,
     active_jobs: std::sync::Arc<std::sync::Mutex<usize>>,
 }
 
@@ -33,7 +34,7 @@ impl WorkerTrait for Worker {
 }
 
 impl Worker {
-    pub fn new() -> Self {
+    pub fn new(tx_err: ErrorChan) -> Self {
         let (tx_image, rx_image) = mpsc::channel(100);
         let (tx_load, rx_load) = mpsc::channel(100);
 
@@ -43,6 +44,7 @@ impl Worker {
             rx_image,
             tx_load,
             rx_load,
+            tx_err,
             active_jobs: std::sync::Arc::new(std::sync::Mutex::new(0)),
         }
     }
@@ -51,57 +53,65 @@ impl Worker {
         let image = image.clone();
         let client = self.transport.clone();
 
-        self.run(self.tx_image.clone(), move || async move {
-            let mut image_buf = Vec::new();
-            image
-                .write_to(
-                    &mut std::io::Cursor::new(&mut image_buf),
-                    image::ImageFormat::Png,
-                )
-                .map_err(WorkerError::ImageError)?;
+        self.run(
+            self.tx_image.clone(),
+            self.tx_err.clone(),
+            move || async move {
+                let mut image_buf = Vec::new();
+                image
+                    .write_to(
+                        &mut std::io::Cursor::new(&mut image_buf),
+                        image::ImageFormat::Png,
+                    )
+                    .map_err(AiToolError::from)?;
 
-            let response = client
-                .send(EditExpressionRequest {
-                    image_bytes: ByteBuf::from(image_buf),
-                    rotate_pitch: expression_params.rotate_pitch,
-                    rotate_yaw: expression_params.rotate_yaw,
-                    rotate_roll: expression_params.rotate_roll,
-                    blink: expression_params.blink,
-                    eyebrow: expression_params.eyebrow,
-                    wink: expression_params.wink,
-                    pupil_x: expression_params.pupil_x,
-                    pupil_y: expression_params.pupil_y,
-                    aaa: expression_params.aaa,
-                    eee: expression_params.eee,
-                    woo: expression_params.woo,
-                    smile: expression_params.smile,
-                    src_weight: expression_params.src_weight,
-                })
-                .await
-                .map_err(WorkerError::Transport)?;
+                let response = client
+                    .send(EditExpressionRequest {
+                        image_bytes: ByteBuf::from(image_buf),
+                        rotate_pitch: expression_params.rotate_pitch,
+                        rotate_yaw: expression_params.rotate_yaw,
+                        rotate_roll: expression_params.rotate_roll,
+                        blink: expression_params.blink,
+                        eyebrow: expression_params.eyebrow,
+                        wink: expression_params.wink,
+                        pupil_x: expression_params.pupil_x,
+                        pupil_y: expression_params.pupil_y,
+                        aaa: expression_params.aaa,
+                        eee: expression_params.eee,
+                        woo: expression_params.woo,
+                        smile: expression_params.smile,
+                        src_weight: expression_params.src_weight,
+                    })
+                    .await
+                    .map_err(AiToolError::from)?;
 
-            let edited_image =
-                image::load_from_memory(&response.image).map_err(WorkerError::ImageError)?;
+                let edited_image =
+                    image::load_from_memory(&response.image).map_err(AiToolError::from)?;
 
-            Ok(edited_image)
-        });
+                Ok(edited_image)
+            },
+        );
     }
 
-    pub fn load(&self, kind: PortraitEditingModel, cache_dir: &PathBuf) {
+    pub fn load(&self, kind: PortraitEditingModel, cache_dir: &Path) {
         let client = self.transport.clone();
         let cache_dir = cache_dir.to_str().unwrap().to_owned();
 
-        self.run(self.tx_load.clone(), move || async move {
-            client
-                .send(LoadRequest {
-                    model: ModelKind::PortraitEditing(kind),
-                    cache_dir,
-                })
-                .await
-                .map_err(WorkerError::Transport)?;
+        self.run(
+            self.tx_load.clone(),
+            self.tx_err.clone(),
+            move || async move {
+                client
+                    .send(LoadRequest {
+                        model: ModelKind::PortraitEditing(kind),
+                        cache_dir,
+                    })
+                    .await
+                    .map_err(AiToolError::from)?;
 
-            Ok(())
-        });
+                Ok(())
+            },
+        );
     }
 
     pub fn edited_image(&mut self) -> Option<DynamicImage> {

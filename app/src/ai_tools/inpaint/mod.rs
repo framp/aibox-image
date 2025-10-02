@@ -1,6 +1,10 @@
 use eframe::egui::{Button, ComboBox, TextEdit, Ui};
 
-use crate::{config::Config, image_canvas::ImageCanvas, worker::WorkerTrait};
+use crate::{
+    config::Config,
+    image_canvas::ImageCanvas,
+    worker::{ErrorChan, WorkerTrait},
+};
 
 mod worker;
 
@@ -14,15 +18,15 @@ pub struct InpaintTool {
 }
 
 impl InpaintTool {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config, tx_err: ErrorChan) -> Self {
         let tool = Self {
             input: String::new(),
-            worker: worker::Worker::new(),
+            worker: worker::Worker::new(tx_err),
             config: config.clone(),
             selected_model: None,
         };
 
-        if let Some(first_model) = tool.config.models.inpainting.iter().next() {
+        if let Some(first_model) = tool.config.models.inpainting.first() {
             // load the first model immediately
             tool.worker
                 .load_model(first_model, &tool.config.models.cache_dir);

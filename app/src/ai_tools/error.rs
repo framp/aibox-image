@@ -3,7 +3,7 @@ use thiserror::Error;
 use super::transport::TransportError;
 
 #[derive(Error, Debug)]
-pub enum WorkerError {
+pub enum AiToolError {
     #[error("Transport error: {0}")]
     Transport(#[from] TransportError),
 

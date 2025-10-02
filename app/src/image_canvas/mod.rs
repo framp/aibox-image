@@ -128,7 +128,7 @@ impl Selection {
         let mut result = mask.clone();
 
         if growth != 0 {
-            let abs_growth = growth.abs() as u32;
+            let abs_growth = growth.unsigned_abs();
             if abs_growth > 0 {
                 let kernel_size = abs_growth * 2 + 1; // Ensure odd kernel size
                 let (width, height) = result.dimensions();
@@ -258,8 +258,7 @@ impl ImageCanvas {
     pub fn clear_image(&mut self, ctx: &eframe::egui::Context) {
         self.image = self
             .original_image
-            .as_ref()
-            .and_then(|img| Some(Image::new(ctx, img.clone())));
+            .as_ref().map(|img| Image::new(ctx, img.clone()));
 
         self.reset_zoom();
     }
@@ -274,7 +273,7 @@ impl ImageCanvas {
 
                 Ok(())
             }
-            Err(e) => Err(format!("Failed to load image: {}", e)),
+            Err(e) => Err(format!("Failed to load image: {e}")),
         }
     }
 

@@ -70,15 +70,18 @@ pub enum FaceSwappingModel {
 }
 
 pub fn load() -> Result<Config, Box<dyn std::error::Error>> {
-    let config = ConfigTrait::builder()
-        .add_source(File::with_name("config").format(FileFormat::Toml))
-        .add_source(
+    let mut builder =
+        ConfigTrait::builder().add_source(File::with_name("config").format(FileFormat::Toml));
+
+    if cfg!(debug_assertions) {
+        builder = builder.add_source(
             File::with_name("config.override")
                 .format(FileFormat::Toml)
                 .required(false),
-        )
-        .build()?
-        .try_deserialize()?;
+        );
+    }
+
+    let config = builder.build()?.try_deserialize()?;
 
     Ok(config)
 }

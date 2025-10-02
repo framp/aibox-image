@@ -6,7 +6,7 @@ use image::{GrayImage, Luma};
 use crate::{
     config::Config,
     image_canvas::{ImageCanvas, Selection},
-    worker::WorkerTrait,
+    worker::{ErrorChan, WorkerTrait},
 };
 
 mod worker;
@@ -20,19 +20,19 @@ pub struct SelectionTool {
 }
 
 impl SelectionTool {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config, tx_err: ErrorChan) -> Self {
         let tool = Self {
             input: String::new(),
             threshold: 0.5,
-            worker: worker::Worker::new(),
+            worker: worker::Worker::new(tx_err),
             config: config.clone(),
             selected_model: None,
         };
 
-        if let Some(first_model) = tool.config.models.selection.iter().next() {
+        if let Some(first_model) = tool.config.models.selection.first() {
             // load the first model immediately
             tool.worker
-                .load_model(&first_model, &tool.config.models.cache_dir);
+                .load_model(first_model, &tool.config.models.cache_dir);
         }
 
         tool

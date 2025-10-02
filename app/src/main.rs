@@ -1,16 +1,28 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(rustdoc::missing_crate_level_docs)]
 
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use eframe::egui;
 
 mod ai_tools;
 mod config;
+mod error;
 mod image_canvas;
+mod msg_panel;
 mod worker;
 
 use ai_tools::ToolsPanel;
 use image_canvas::ImageCanvas;
+use once_cell::sync::Lazy;
+use tokio::runtime::Runtime;
+
+use crate::msg_panel::MsgPanel;
+
+static RUNTIME: Lazy<Runtime> = Lazy::new(|| {
+    Runtime::new()
+        .context("Failed to create Tokio runtime")
+        .unwrap()
+});
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
@@ -18,55 +30,57 @@ fn main() -> anyhow::Result<()> {
     let config =
         config::load().map_err(|e| anyhow::anyhow!("Failed to load application config: {}", e))?;
 
-    let rt = tokio::runtime::Runtime::new().context("Failed to create Tokio runtime")?;
+    // Spawn a thread that keeps the runtime alive
+    std::thread::spawn(|| {
+        RUNTIME.block_on(futures::future::pending::<()>());
+    });
 
-    rt.block_on(async {
-        let options: eframe::NativeOptions = eframe::NativeOptions {
-            viewport: egui::ViewportBuilder::default()
-                .with_inner_size([1200.0, 800.0])
-                .with_min_inner_size([800.0, 600.0])
-                .with_drag_and_drop(true),
-            ..Default::default()
-        };
+    let options: eframe::NativeOptions = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([1200.0, 800.0])
+            .with_min_inner_size([800.0, 600.0])
+            .with_drag_and_drop(true),
+        ..Default::default()
+    };
 
-        eframe::run_native(
-            "AI Image Editor",
-            options,
-            Box::new(|cc| {
-                egui_extras::install_image_loaders(&cc.egui_ctx);
-                Ok(Box::new(ImageEditorApp::new(&config)))
-            }),
-        )
-        .map_err(|e| anyhow::anyhow!("Failed to run eframe application: {:?}", e))
-    })
+    eframe::run_native(
+        "AI Image Editor",
+        options,
+        Box::new(|cc| {
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+            Ok(Box::new(ImageEditorApp::new(&config)))
+        }),
+    )
+    .map_err(|e| anyhow::anyhow!("Failed to run eframe application: {:?}", e))
 }
 
 struct ImageEditorApp {
     image_canvas: ImageCanvas,
     tools_panel: ToolsPanel,
-    error_message: Option<String>,
+    msg_panel: MsgPanel,
 }
 
 impl ImageEditorApp {
     fn new(config: &config::Config) -> Self {
         let canvas = ImageCanvas::default();
-        let tools_panel = ToolsPanel::new(&config);
+        let msg_panel = MsgPanel::new();
+        let tools_panel = ToolsPanel::new(config, msg_panel.tx_error.clone());
 
         Self {
             image_canvas: canvas,
             tools_panel,
-            error_message: None,
+            msg_panel,
         }
     }
 
     fn load_image(&mut self, file_path: std::path::PathBuf, ctx: &egui::Context) {
         match self.image_canvas.load_image(file_path.clone(), ctx) {
             Ok(()) => {
-                self.error_message = None;
-                println!("Successfully loaded: {:?}", file_path);
+                self.msg_panel.clear();
+                println!("Successfully loaded: {file_path:?}");
             }
             Err(e) => {
-                self.error_message = Some(e);
+                let _ = self.msg_panel.tx_error.try_send(anyhow!(e).into());
             }
         }
     }
@@ -97,11 +111,14 @@ impl ImageEditorApp {
         {
             match self.save_to_path(path.clone()) {
                 Ok(()) => {
-                    self.error_message = None;
-                    println!("Saved as: {:?}", path);
+                    self.msg_panel.clear();
+                    println!("Saved as: {path:?}");
                 }
                 Err(e) => {
-                    self.error_message = Some(format!("Save failed: {}", e));
+                    let _ = self
+                        .msg_panel
+                        .tx_error
+                        .try_send(anyhow!("Save failed: {}", e).into());
                 }
             }
         }
@@ -112,7 +129,7 @@ impl ImageEditorApp {
             image
                 .image()
                 .save(&path)
-                .map_err(|e| format!("Failed to save file: {}", e))?;
+                .map_err(|e| format!("Failed to save file: {e}"))?;
             Ok(())
         } else {
             Err("No image loaded".to_string())
@@ -174,6 +191,12 @@ impl eframe::App for ImageEditorApp {
                                         }
                                     });
                                 });
+                                ui.add_enabled_ui(self.msg_panel.has_messages(), |ui| {
+                                    if ui.button("Messages").clicked() {
+                                        self.msg_panel.open_modal();
+                                    }
+                                    self.msg_panel.show_modal(ui);
+                                })
                             });
                         });
                         egui::SidePanel::right("tools_panel")
@@ -187,10 +210,7 @@ impl eframe::App for ImageEditorApp {
                                 });
                             });
                         egui::CentralPanel::default().show_inside(ui, |ui| {
-                            if let Some(ref error) = self.error_message {
-                                ui.colored_label(egui::Color32::RED, format!("Error: {}", error));
-                                ui.separator();
-                            }
+                            self.msg_panel.show_last(ui);
                             self.image_canvas.show(ui);
                         });
                     });
@@ -204,10 +224,16 @@ impl eframe::App for ImageEditorApp {
                         ) {
                             self.load_image(path, ctx);
                         } else {
-                            self.error_message = Some(format!("Unsupported file format: {}", ext));
+                            let _ = self
+                                .msg_panel
+                                .tx_error
+                                .try_send(anyhow!("Unsupported file format: {}", ext).into());
                         }
                     } else {
-                        self.error_message = Some("File has no extension".to_string());
+                        let _ = self
+                            .msg_panel
+                            .tx_error
+                            .try_send(anyhow!("File has no extension").into());
                     }
                 }
             });

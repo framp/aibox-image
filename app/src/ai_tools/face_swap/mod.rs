@@ -1,7 +1,7 @@
 use eframe::egui::{Button, ColorImage, ComboBox, Image, TextureHandle, Ui};
 use std::hash::{Hash, Hasher};
 
-use crate::{config::Config, image_canvas::ImageCanvas};
+use crate::{config::Config, image_canvas::ImageCanvas, worker::ErrorChan};
 
 mod worker;
 
@@ -22,12 +22,12 @@ pub struct FaceSwapTool {
 }
 
 impl FaceSwapTool {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config, tx_err: ErrorChan) -> Self {
         let mut tool = Self {
             loading: false,
             analyzing_faces_source: false,
             analyzing_faces_canvas: false,
-            worker: worker::Worker::new(),
+            worker: worker::Worker::new(tx_err),
             config: config.clone(),
             selected_model: None,
             source_image: None,
@@ -38,7 +38,7 @@ impl FaceSwapTool {
             last_canvas_image_hash: None,
         };
 
-        if let Some(first_model) = tool.config.models.face_swapping.iter().next() {
+        if let Some(first_model) = tool.config.models.face_swapping.first() {
             tool.selected_model = Some(first_model.name.clone());
             tool.loading = true;
             tool.worker
@@ -152,9 +152,9 @@ impl super::Tool for FaceSwapTool {
                     for (i, face) in self.canvas_faces.iter().enumerate() {
                         let is_selected = self.selected_face_index == Some(i as i32);
                         let button_text = if face.is_primary {
-                            format!("Face {} (Primary)", i)
+                            format!("Face {i} (Primary)")
                         } else {
-                            format!("Face {}", i)
+                            format!("Face {i}")
                         };
 
                         if ui.selectable_label(is_selected, &button_text).clicked() {

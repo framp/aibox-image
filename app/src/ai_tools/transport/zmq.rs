@@ -32,7 +32,7 @@ impl Transport for ZmqTransport {
             .build();
 
         let mut buf = Vec::new();
-        let request = Request::from(req.into());
+        let request = req.into();
         request.serialize(&mut Serializer::new(&mut buf).with_struct_map())?;
 
         let socket =
