@@ -212,6 +212,17 @@ pub struct ImageCanvas {
     pub is_dragging: bool,
     pub drag_start: eframe::egui::Pos2,
     pub selections: Vec<Selection>,
+    pub brush_enabled: bool,
+    pub brush_callback: Option<
+        Box<
+            dyn FnMut(eframe::egui::Pos2, Option<eframe::egui::Pos2>, eframe::egui::Rect) + 'static,
+        >,
+    >,
+    pub brush_paint_callback: Option<
+        Box<
+            dyn FnMut(&mut Vec<Selection>, eframe::egui::Pos2, Option<eframe::egui::Pos2>, eframe::egui::Rect, &eframe::egui::Context) + 'static,
+        >,
+    >,
 }
 
 impl Default for ImageCanvas {
@@ -224,6 +235,9 @@ impl Default for ImageCanvas {
             is_dragging: false,
             drag_start: eframe::egui::Pos2::ZERO,
             selections: Vec::new(),
+            brush_enabled: false,
+            brush_callback: None,
+            brush_paint_callback: None,
         }
     }
 }
@@ -283,6 +297,13 @@ impl ImageCanvas {
             let available_size = ui.available_size();
             let response =
                 ui.allocate_response(available_size, eframe::egui::Sense::click_and_drag());
+
+            let scaled_size = image.size * self.zoom;
+            let center = available_size * 0.5;
+            let image_pos = center - scaled_size * 0.5 + self.offset;
+            let image_rect =
+                eframe::egui::Rect::from_min_size(response.rect.min + image_pos, scaled_size);
+
             if response.hovered() {
                 ui.ctx().input(|i| {
                     let scroll_delta = i.smooth_scroll_delta.y;
@@ -292,24 +313,47 @@ impl ImageCanvas {
                     }
                 });
             }
-            if response.dragged() {
-                if !self.is_dragging {
-                    self.is_dragging = true;
-                    self.drag_start = response.interact_pointer_pos().unwrap_or_default();
-                }
-                if let Some(pointer_pos) = response.interact_pointer_pos() {
-                    let delta = pointer_pos - self.drag_start;
-                    self.offset += delta;
-                    self.drag_start = pointer_pos;
+
+            if self.brush_enabled && (self.brush_callback.is_some() || self.brush_paint_callback.is_some()) {
+                // Brush mode: paint on the mask
+                if response.dragged() {
+                    if let Some(pointer_pos) = response.interact_pointer_pos() {
+                        let last_pos = if !self.is_dragging {
+                            self.is_dragging = true;
+                            None
+                        } else {
+                            Some(self.drag_start)
+                        };
+
+                        if let Some(callback) = &mut self.brush_callback {
+                            callback(pointer_pos, last_pos, image_rect);
+                        }
+
+                        if let Some(callback) = &mut self.brush_paint_callback {
+                            callback(&mut self.selections, pointer_pos, last_pos, image_rect, ui.ctx());
+                        }
+
+                        self.drag_start = pointer_pos;
+                    }
+                } else {
+                    self.is_dragging = false;
                 }
             } else {
-                self.is_dragging = false;
+                // Pan mode: move the canvas
+                if response.dragged() {
+                    if !self.is_dragging {
+                        self.is_dragging = true;
+                        self.drag_start = response.interact_pointer_pos().unwrap_or_default();
+                    }
+                    if let Some(pointer_pos) = response.interact_pointer_pos() {
+                        let delta = pointer_pos - self.drag_start;
+                        self.offset += delta;
+                        self.drag_start = pointer_pos;
+                    }
+                } else {
+                    self.is_dragging = false;
+                }
             }
-            let scaled_size = image.size * self.zoom;
-            let center = available_size * 0.5;
-            let image_pos = center - scaled_size * 0.5 + self.offset;
-            let image_rect =
-                eframe::egui::Rect::from_min_size(response.rect.min + image_pos, scaled_size);
 
             ui.painter().image(
                 image.texture.id(),
