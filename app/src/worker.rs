@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::Sender;
 
-use crate::error::Error;
+use crate::{RUNTIME, error::Error};
 
 pub type ErrorChan = Sender<Error>;
 
@@ -22,7 +22,7 @@ pub trait WorkerTrait {
     {
         let jobs = self.active_jobs();
 
-        tokio::spawn(async move {
+        RUNTIME.spawn(async move {
             {
                 let mut count = jobs.lock().unwrap();
                 *count += 1;

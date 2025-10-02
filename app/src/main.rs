@@ -13,9 +13,16 @@ mod worker;
 
 use ai_tools::ToolsPanel;
 use image_canvas::ImageCanvas;
-use tokio::sync::mpsc::{Receiver, Sender};
+use once_cell::sync::Lazy;
+use tokio::runtime::Runtime;
 
-use crate::{error::Error, msg_panel::MsgPanel};
+use crate::msg_panel::MsgPanel;
+
+static RUNTIME: Lazy<Runtime> = Lazy::new(|| {
+    Runtime::new()
+        .context("Failed to create Tokio runtime")
+        .unwrap()
+});
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
@@ -23,27 +30,28 @@ fn main() -> anyhow::Result<()> {
     let config =
         config::load().map_err(|e| anyhow::anyhow!("Failed to load application config: {}", e))?;
 
-    let rt = tokio::runtime::Runtime::new().context("Failed to create Tokio runtime")?;
+    // Spawn a thread that keeps the runtime alive
+    std::thread::spawn(|| {
+        RUNTIME.block_on(futures::future::pending::<()>());
+    });
 
-    rt.block_on(async {
-        let options: eframe::NativeOptions = eframe::NativeOptions {
-            viewport: egui::ViewportBuilder::default()
-                .with_inner_size([1200.0, 800.0])
-                .with_min_inner_size([800.0, 600.0])
-                .with_drag_and_drop(true),
-            ..Default::default()
-        };
+    let options: eframe::NativeOptions = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([1200.0, 800.0])
+            .with_min_inner_size([800.0, 600.0])
+            .with_drag_and_drop(true),
+        ..Default::default()
+    };
 
-        eframe::run_native(
-            "AI Image Editor",
-            options,
-            Box::new(|cc| {
-                egui_extras::install_image_loaders(&cc.egui_ctx);
-                Ok(Box::new(ImageEditorApp::new(&config)))
-            }),
-        )
-        .map_err(|e| anyhow::anyhow!("Failed to run eframe application: {:?}", e))
-    })
+    eframe::run_native(
+        "AI Image Editor",
+        options,
+        Box::new(|cc| {
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+            Ok(Box::new(ImageEditorApp::new(&config)))
+        }),
+    )
+    .map_err(|e| anyhow::anyhow!("Failed to run eframe application: {:?}", e))
 }
 
 struct ImageEditorApp {

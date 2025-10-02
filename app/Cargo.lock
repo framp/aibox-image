@@ -148,6 +148,7 @@ dependencies = [
  "fast_morphology",
  "futures 0.3.31",
  "image",
+ "once_cell",
  "rfd",
  "rmp-serde",
  "serde",
