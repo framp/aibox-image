@@ -2,11 +2,9 @@ use eframe::egui::{
     Button, Checkbox, CollapsingHeader, ComboBox, DragValue, Image, Slider, TextEdit, Ui,
 };
 use image::{GrayImage, Luma};
-use tokio::sync::mpsc::Sender;
 
 use crate::{
     config::Config,
-    error::Error,
     image_canvas::{ImageCanvas, Selection},
     worker::{ErrorChan, WorkerTrait},
 };
@@ -31,10 +29,10 @@ impl SelectionTool {
             selected_model: None,
         };
 
-        if let Some(first_model) = tool.config.models.selection.iter().next() {
+        if let Some(first_model) = tool.config.models.selection.first() {
             // load the first model immediately
             tool.worker
-                .load_model(&first_model, &tool.config.models.cache_dir);
+                .load_model(first_model, &tool.config.models.cache_dir);
         }
 
         tool

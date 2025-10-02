@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 
 use super::IntoResponse;
-use crate::config::{FaceSwappingModel, InpaintingModel, PortraitEditingModel, SelectionModel, UpscalingModel};
+use crate::config::{
+    FaceSwappingModel, InpaintingModel, PortraitEditingModel, SelectionModel, UpscalingModel,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExpressionParams {
@@ -64,9 +66,9 @@ impl IntoResponse for ImageSelectionRequest {
     type Response = ImageSelectionResponse;
 }
 
-impl Into<Request> for ImageSelectionRequest {
-    fn into(self) -> Request {
-        Request::ImageSelection(self)
+impl From<ImageSelectionRequest> for Request {
+    fn from(val: ImageSelectionRequest) -> Self {
+        Request::ImageSelection(val)
     }
 }
 
@@ -87,9 +89,9 @@ impl IntoResponse for InpaintRequest {
     type Response = InpaintResponse;
 }
 
-impl Into<Request> for InpaintRequest {
-    fn into(self) -> Request {
-        Request::Inpaint(self)
+impl From<InpaintRequest> for Request {
+    fn from(val: InpaintRequest) -> Self {
+        Request::Inpaint(val)
     }
 }
 
@@ -109,9 +111,9 @@ impl IntoResponse for UpscaleRequest {
     type Response = UpscaleResponse;
 }
 
-impl Into<Request> for UpscaleRequest {
-    fn into(self) -> Request {
-        Request::Upscale(self)
+impl From<UpscaleRequest> for Request {
+    fn from(val: UpscaleRequest) -> Self {
+        Request::Upscale(val)
     }
 }
 
@@ -143,9 +145,9 @@ impl IntoResponse for EditExpressionRequest {
     type Response = EditExpressionResponse;
 }
 
-impl Into<Request> for EditExpressionRequest {
-    fn into(self) -> Request {
-        Request::EditExpression(self)
+impl From<EditExpressionRequest> for Request {
+    fn from(val: EditExpressionRequest) -> Self {
+        Request::EditExpression(val)
     }
 }
 
@@ -176,9 +178,9 @@ impl IntoResponse for LoadRequest {
     type Response = EmptyResponse;
 }
 
-impl Into<Request> for LoadRequest {
-    fn into(self) -> Request {
-        Request::Load(self)
+impl From<LoadRequest> for Request {
+    fn from(val: LoadRequest) -> Self {
+        Request::Load(val)
     }
 }
 
@@ -193,9 +195,9 @@ impl IntoResponse for FaceSwapRequest {
     type Response = FaceSwapResponse;
 }
 
-impl Into<Request> for FaceSwapRequest {
-    fn into(self) -> Request {
-        Request::FaceSwap(self)
+impl From<FaceSwapRequest> for Request {
+    fn from(val: FaceSwapRequest) -> Self {
+        Request::FaceSwap(val)
     }
 }
 
@@ -214,9 +216,9 @@ impl IntoResponse for AnalyzeFacesRequest {
     type Response = AnalyzeFacesResponse;
 }
 
-impl Into<Request> for AnalyzeFacesRequest {
-    fn into(self) -> Request {
-        Request::AnalyzeFaces(self)
+impl From<AnalyzeFacesRequest> for Request {
+    fn from(val: AnalyzeFacesRequest) -> Self {
+        Request::AnalyzeFaces(val)
     }
 }
 

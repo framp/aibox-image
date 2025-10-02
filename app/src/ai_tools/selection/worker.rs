@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use image::{DynamicImage, GrayImage};
@@ -14,7 +14,6 @@ use crate::{
         },
     },
     config::{ModelEntry, SelectionModel},
-    error::Error,
     worker::{ErrorChan, WorkerTrait},
 };
 
@@ -91,7 +90,7 @@ impl Worker {
         );
     }
 
-    pub fn load_model(&self, model: &ModelEntry<SelectionModel>, cache_dir: &PathBuf) {
+    pub fn load_model(&self, model: &ModelEntry<SelectionModel>, cache_dir: &Path) {
         let client = self.client.clone();
         let cache_dir = cache_dir.to_str().unwrap().to_owned();
         let model = model.to_owned();

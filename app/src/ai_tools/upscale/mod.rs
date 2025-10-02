@@ -1,7 +1,6 @@
 use eframe::egui::{Button, ComboBox, Ui};
-use tokio::sync::mpsc::Sender;
 
-use crate::{config::Config, error::Error, image_canvas::ImageCanvas, worker::ErrorChan};
+use crate::{config::Config, image_canvas::ImageCanvas, worker::ErrorChan};
 
 mod worker;
 
@@ -22,7 +21,7 @@ impl UpscaleTool {
             selected_model: None,
         };
 
-        if let Some(first_model) = tool.config.models.upscaling.iter().next() {
+        if let Some(first_model) = tool.config.models.upscaling.first() {
             tool.loading = true;
             // load the first model immediately
             tool.worker

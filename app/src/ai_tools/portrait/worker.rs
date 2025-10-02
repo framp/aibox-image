@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use image::DynamicImage;
 use serde_bytes::ByteBuf;
@@ -14,7 +14,6 @@ use crate::{
         },
     },
     config::PortraitEditingModel,
-    error::Error,
     worker::{ErrorChan, WorkerTrait},
 };
 
@@ -94,7 +93,7 @@ impl Worker {
         );
     }
 
-    pub fn load(&self, kind: PortraitEditingModel, cache_dir: &PathBuf) {
+    pub fn load(&self, kind: PortraitEditingModel, cache_dir: &Path) {
         let client = self.transport.clone();
         let cache_dir = cache_dir.to_str().unwrap().to_owned();
 

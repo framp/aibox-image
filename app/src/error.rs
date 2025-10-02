@@ -1,5 +1,3 @@
-use anyhow::anyhow;
-use eframe::egui;
 
 use crate::ai_tools::error::AiToolError;
 

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use image::DynamicImage;
 use serde_bytes::ByteBuf;
@@ -14,7 +14,6 @@ use crate::{
         },
     },
     config::UpscalingModel,
-    error::Error,
     worker::{ErrorChan, WorkerTrait},
 };
 
@@ -69,7 +68,7 @@ impl Worker {
 
                 let response = client
                     .send(UpscaleRequest {
-                        prompt: prompt,
+                        prompt,
                         image_bytes: ByteBuf::from(image_buf),
                     })
                     .await
@@ -83,7 +82,7 @@ impl Worker {
         );
     }
 
-    pub fn load(&self, kind: UpscalingModel, cache_dir: &PathBuf) {
+    pub fn load(&self, kind: UpscalingModel, cache_dir: &Path) {
         let client = self.transport.clone();
         let cache_dir = cache_dir.to_str().unwrap().to_owned();
 

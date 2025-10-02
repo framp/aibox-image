@@ -1,8 +1,7 @@
 use eframe::egui::{Button, CollapsingHeader, ComboBox, DragValue, Ui};
-use tokio::sync::mpsc::Sender;
 
 use crate::{
-    ai_tools::transport::types::ExpressionParams, config::Config, error::Error,
+    ai_tools::transport::types::ExpressionParams, config::Config,
     image_canvas::ImageCanvas, worker::ErrorChan,
 };
 
@@ -56,7 +55,7 @@ impl PortraitTool {
             src_weight: 1.0,
         };
 
-        if let Some(first_model) = tool.config.models.portrait_editing.iter().next() {
+        if let Some(first_model) = tool.config.models.portrait_editing.first() {
             tool.loading = true;
             tool.loading_model = Some(first_model.name.clone());
             tool.worker

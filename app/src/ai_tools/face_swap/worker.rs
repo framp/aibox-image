@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use image::DynamicImage;
 use serde_bytes::ByteBuf;
@@ -16,7 +16,6 @@ use crate::{
         },
     },
     config::FaceSwappingModel,
-    error::Error,
     worker::{ErrorChan, WorkerTrait},
 };
 
@@ -104,7 +103,7 @@ impl Worker {
         );
     }
 
-    pub fn load(&self, kind: FaceSwappingModel, cache_dir: &PathBuf) {
+    pub fn load(&self, kind: FaceSwappingModel, cache_dir: &Path) {
         let client = self.transport.clone();
         let cache_dir = cache_dir.to_str().unwrap().to_owned();
 

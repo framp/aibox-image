@@ -1,6 +1,5 @@
 use std::time::{Duration, Instant};
 
-use anyhow::anyhow;
 use eframe::egui;
 
 use crate::error::Error;
@@ -58,7 +57,7 @@ impl MsgPanel {
 
     fn show_msg(msg: &Message, ui: &mut egui::Ui) {
         let (color, text) = match &msg.kind {
-            MessageKind::Error(e) => (egui::Color32::RED, format!("Error: {}", e)),
+            MessageKind::Error(e) => (egui::Color32::RED, format!("Error: {e}")),
         };
 
         ui.colored_label(color, text);

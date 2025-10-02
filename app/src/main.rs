@@ -64,7 +64,7 @@ impl ImageEditorApp {
     fn new(config: &config::Config) -> Self {
         let canvas = ImageCanvas::default();
         let msg_panel = MsgPanel::new();
-        let tools_panel = ToolsPanel::new(&config, msg_panel.tx_error.clone());
+        let tools_panel = ToolsPanel::new(config, msg_panel.tx_error.clone());
 
         Self {
             image_canvas: canvas,
@@ -77,7 +77,7 @@ impl ImageEditorApp {
         match self.image_canvas.load_image(file_path.clone(), ctx) {
             Ok(()) => {
                 self.msg_panel.clear();
-                println!("Successfully loaded: {:?}", file_path);
+                println!("Successfully loaded: {file_path:?}");
             }
             Err(e) => {
                 let _ = self.msg_panel.tx_error.try_send(anyhow!(e).into());
@@ -112,7 +112,7 @@ impl ImageEditorApp {
             match self.save_to_path(path.clone()) {
                 Ok(()) => {
                     self.msg_panel.clear();
-                    println!("Saved as: {:?}", path);
+                    println!("Saved as: {path:?}");
                 }
                 Err(e) => {
                     let _ = self
@@ -129,7 +129,7 @@ impl ImageEditorApp {
             image
                 .image()
                 .save(&path)
-                .map_err(|e| format!("Failed to save file: {}", e))?;
+                .map_err(|e| format!("Failed to save file: {e}"))?;
             Ok(())
         } else {
             Err("No image loaded".to_string())

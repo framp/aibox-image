@@ -1,4 +1,4 @@
-use std::{io::Cursor, path::PathBuf};
+use std::{io::Cursor, path::Path};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use image::{DynamicImage, GrayImage, Luma};
@@ -14,7 +14,6 @@ use crate::{
         },
     },
     config::{InpaintingModel, ModelEntry},
-    error::Error,
     worker::{ErrorChan, WorkerTrait},
 };
 
@@ -74,7 +73,7 @@ impl Worker {
 
                 let response = client
                     .send(InpaintRequest {
-                        prompt: prompt,
+                        prompt,
                         image_bytes: ByteBuf::from(image_buf),
                         mask: ByteBuf::from(mask_buf),
                     })
@@ -89,7 +88,7 @@ impl Worker {
         );
     }
 
-    pub fn load_model(&self, model: &ModelEntry<InpaintingModel>, cache_dir: &PathBuf) {
+    pub fn load_model(&self, model: &ModelEntry<InpaintingModel>, cache_dir: &Path) {
         let client = self.transport.clone();
         let cache_dir = cache_dir.to_str().unwrap().to_owned();
         let model = model.clone();

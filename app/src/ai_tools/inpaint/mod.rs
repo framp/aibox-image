@@ -1,9 +1,7 @@
 use eframe::egui::{Button, ComboBox, TextEdit, Ui};
-use tokio::sync::mpsc::Sender;
 
 use crate::{
     config::Config,
-    error::Error,
     image_canvas::ImageCanvas,
     worker::{ErrorChan, WorkerTrait},
 };
@@ -28,7 +26,7 @@ impl InpaintTool {
             selected_model: None,
         };
 
-        if let Some(first_model) = tool.config.models.inpainting.iter().next() {
+        if let Some(first_model) = tool.config.models.inpainting.first() {
             // load the first model immediately
             tool.worker
                 .load_model(first_model, &tool.config.models.cache_dir);
