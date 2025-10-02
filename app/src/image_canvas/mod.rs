@@ -212,6 +212,7 @@ pub struct ImageCanvas {
     pub is_dragging: bool,
     pub drag_start: eframe::egui::Pos2,
     pub selections: Vec<Selection>,
+    pub history: crate::history::History,
 }
 
 impl Default for ImageCanvas {
@@ -224,6 +225,7 @@ impl Default for ImageCanvas {
             is_dragging: false,
             drag_start: eframe::egui::Pos2::ZERO,
             selections: Vec::new(),
+            history: crate::history::History::default(),
         }
     }
 }
@@ -255,10 +257,34 @@ impl ImageCanvas {
         self.reset_zoom();
     }
 
+    pub fn set_image_with_history(
+        &mut self,
+        image: DynamicImage,
+        ctx: &eframe::egui::Context,
+        action: crate::history::Action,
+    ) {
+        self.history
+            .push(action, image.clone(), self.selections.clone());
+        self.set_image(image, ctx);
+    }
+
+    pub fn restore_from_history(
+        &mut self,
+        entry: &crate::history::HistoryEntry,
+        ctx: &eframe::egui::Context,
+    ) {
+        self.set_image(entry.image.clone(), ctx);
+        self.selections = entry.selections.clone();
+        for selection in &mut self.selections {
+            selection.update_applied_mask(ctx);
+        }
+    }
+
     pub fn clear_image(&mut self, ctx: &eframe::egui::Context) {
         self.image = self
             .original_image
-            .as_ref().map(|img| Image::new(ctx, img.clone()));
+            .as_ref()
+            .map(|img| Image::new(ctx, img.clone()));
 
         self.reset_zoom();
     }

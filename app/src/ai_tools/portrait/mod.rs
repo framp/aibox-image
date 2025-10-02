@@ -1,8 +1,8 @@
 use eframe::egui::{Button, CollapsingHeader, ComboBox, DragValue, Ui};
 
 use crate::{
-    ai_tools::transport::types::ExpressionParams, config::Config,
-    image_canvas::ImageCanvas, worker::ErrorChan,
+    ai_tools::transport::types::ExpressionParams, config::Config, image_canvas::ImageCanvas,
+    worker::ErrorChan,
 };
 
 mod worker;
@@ -83,6 +83,10 @@ impl PortraitTool {
 }
 
 impl super::Tool for PortraitTool {
+    fn name(&self) -> &str {
+        "Portrait"
+    }
+
     fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
         ui.push_id("portrait", |ui| {
             ui.label("🎭 Portrait Editor");
@@ -278,7 +282,12 @@ impl super::Tool for PortraitTool {
 
             if let Some(image) = self.worker.edited_image() {
                 self.loading = false;
-                canvas.set_image(image, ui.ctx());
+
+                canvas.set_image_with_history(
+                    image,
+                    ui.ctx(),
+                    crate::history::Action::PortraitEdit,
+                );
             }
 
             if self.worker.loaded() {
