@@ -12,11 +12,12 @@ mod upscale;
 
 pub trait Tool {
     fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas);
+    fn name(&self) -> &str;
 }
 
-#[derive(Default)]
 pub struct ToolsPanel {
     pub tools: Vec<Box<dyn Tool>>,
+    selected_tab: usize,
 }
 
 impl ToolsPanel {
@@ -29,15 +30,27 @@ impl ToolsPanel {
             Box::new(face_swap::FaceSwapTool::new(config, tx_err.clone())) as Box<dyn Tool>,
         ];
 
-        Self { tools }
+        Self {
+            tools,
+            selected_tab: 0,
+        }
     }
 
     pub fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas, _has_image: bool) {
-        ui.heading("🛠 Tools");
+        ui.horizontal(|ui| {
+            for (idx, tool) in self.tools.iter().enumerate() {
+                if ui
+                    .selectable_label(self.selected_tab == idx, tool.name())
+                    .clicked()
+                {
+                    self.selected_tab = idx;
+                }
+            }
+        });
 
-        for tool in self.tools.iter_mut() {
-            ui.separator();
-            ui.add_space(5.0);
+        ui.separator();
+
+        if let Some(tool) = self.tools.get_mut(self.selected_tab) {
             tool.show(ui, canvas);
         }
     }
