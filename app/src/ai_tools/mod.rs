@@ -5,6 +5,7 @@ use crate::{config::Config, image_canvas::ImageCanvas, worker::ErrorChan};
 pub mod error;
 mod face_swap;
 mod inpaint;
+pub mod launcher;
 mod portrait;
 mod selection;
 mod transport;
