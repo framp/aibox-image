@@ -9,11 +9,14 @@ use eframe::egui;
 mod ai_tools;
 mod config;
 mod error;
+mod history;
+mod history_panel;
 mod image_canvas;
 mod msg_panel;
 mod worker;
 
 use ai_tools::{ToolsPanel, launcher};
+use history_panel::HistoryPanel;
 use image_canvas::ImageCanvas;
 use once_cell::sync::Lazy;
 use tokio::runtime::Runtime;
@@ -76,6 +79,7 @@ fn main() -> anyhow::Result<()> {
 struct ImageEditorApp {
     image_canvas: ImageCanvas,
     tools_panel: ToolsPanel,
+    history_panel: HistoryPanel,
     msg_panel: MsgPanel,
 }
 
@@ -84,10 +88,12 @@ impl ImageEditorApp {
         let canvas = ImageCanvas::default();
         let msg_panel = MsgPanel::new();
         let tools_panel = ToolsPanel::new(config, msg_panel.tx_error.clone());
+        let history_panel = HistoryPanel::new();
 
         Self {
             image_canvas: canvas,
             tools_panel,
+            history_panel,
             msg_panel,
         }
     }
@@ -97,6 +103,19 @@ impl ImageEditorApp {
             Ok(()) => {
                 self.msg_panel.clear();
                 println!("Successfully loaded: {file_path:?}");
+
+                if let Some(image) = self.image_canvas.image.as_ref() {
+                    let path_str = file_path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("image")
+                        .to_string();
+                    self.image_canvas.history.push(
+                        crate::history::Action::LoadImage { path: path_str },
+                        image.image().clone(),
+                        self.image_canvas.selections.clone(),
+                    );
+                }
             }
             Err(e) => {
                 let _ = self.msg_panel.tx_error.try_send(anyhow!(e).into());
@@ -174,7 +193,7 @@ impl eframe::App for ImageEditorApp {
                             ui.horizontal(|ui| {
                                 ui.menu_button("File", |ui| {
                                     if ui.button("Open Image...").clicked() {
-                                        self.open_file_dialog(ctx);
+                                        self.open_file_dialog(ui.ctx());
                                         ui.close();
                                     }
                                     if ui.button("Load Test Image").clicked() {
@@ -219,10 +238,13 @@ impl eframe::App for ImageEditorApp {
                             });
                         });
                         egui::SidePanel::right("tools_panel")
-                            .default_width(300.0)
-                            .min_width(250.0)
-                            .max_width(400.0)
+                            .default_width(350.0)
+                            .min_width(350.0)
+                            .max_width(450.0)
                             .show_inside(ui, |ui| {
+                                self.history_panel.show(ui, &mut self.image_canvas);
+
+                                ui.heading("🛠 Tools");
                                 egui::ScrollArea::vertical().show(ui, |ui| {
                                     let has_image = self.image_canvas.has_image();
                                     self.tools_panel.show(ui, &mut self.image_canvas, has_image);

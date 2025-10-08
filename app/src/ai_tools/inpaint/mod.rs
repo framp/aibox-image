@@ -82,6 +82,10 @@ impl InpaintTool {
 }
 
 impl super::Tool for InpaintTool {
+    fn name(&self) -> &str {
+        "Inpaint"
+    }
+
     fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
         ui.push_id("inpaint", |ui| {
             ui.label("Inpaint Tool");
@@ -100,7 +104,13 @@ impl super::Tool for InpaintTool {
             }
 
             if let Some(image) = self.worker.inpainted() {
-                canvas.set_image(image, ui.ctx());
+                canvas.set_image_with_history(
+                    image,
+                    ui.ctx(),
+                    crate::history::Action::Inpaint {
+                        prompt: self.input.clone(),
+                    },
+                );
                 for selection in &mut canvas.selections {
                     selection.visible = false;
                 }

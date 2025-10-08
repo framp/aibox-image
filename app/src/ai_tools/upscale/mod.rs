@@ -33,6 +33,10 @@ impl UpscaleTool {
 }
 
 impl super::Tool for UpscaleTool {
+    fn name(&self) -> &str {
+        "Upscale"
+    }
+
     fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
         ui.push_id("upscale", |ui| {
             ui.label("Upscale Tool");
@@ -75,7 +79,7 @@ impl super::Tool for UpscaleTool {
 
             if let Some(image) = self.worker.upscaled() {
                 self.loading = false;
-                canvas.set_image(image, ui.ctx());
+                canvas.set_image_with_history(image, ui.ctx(), crate::history::Action::Upscale);
             }
 
             if self.worker.loaded() {

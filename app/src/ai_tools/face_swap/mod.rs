@@ -50,6 +50,10 @@ impl FaceSwapTool {
 }
 
 impl super::Tool for FaceSwapTool {
+    fn name(&self) -> &str {
+        "Face Swap"
+    }
+
     fn show(&mut self, ui: &mut Ui, canvas: &mut ImageCanvas) {
         ui.push_id("face_swap", |ui| {
             ui.label("Face Swap Tool");
@@ -152,9 +156,9 @@ impl super::Tool for FaceSwapTool {
                     for (i, face) in self.canvas_faces.iter().enumerate() {
                         let is_selected = self.selected_face_index == Some(i as i32);
                         let button_text = if face.is_primary {
-                            format!("Face {i} (Primary)")
+                            format!("Face {} (Primary)", i)
                         } else {
-                            format!("Face {i}")
+                            format!("Face {}", i)
                         };
 
                         if ui.selectable_label(is_selected, &button_text).clicked() {
@@ -213,7 +217,7 @@ impl super::Tool for FaceSwapTool {
 
             if let Some(image) = self.worker.swapped() {
                 self.loading = false;
-                canvas.set_image(image, ui.ctx());
+                canvas.set_image_with_history(image, ui.ctx(), crate::history::Action::FaceSwap);
             }
 
             if self.worker.loaded() {
