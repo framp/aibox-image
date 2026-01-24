@@ -190,7 +190,3 @@ cargo build --release
 cd ../backend/selection-service
 uv sync
 ```
-
-## License
-
-This project is not published and is for private use.
