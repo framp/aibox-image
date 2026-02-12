@@ -2,16 +2,9 @@
   "folders": [
     { "path": ".", "name": "root" },
     { "path": "app" },
-    { "path": "backend/aibox-image-lib" },
-    { "path": "backend/inpainting-service" },
-    { "path": "backend/selection-service" },
-    { "path": "backend/upscaling-service" }
-    { "path": "backend/portrait-editing-service" }
-    { "path": "backend/face-swapping-service" }
+    { "path": "backend" }
   ],
   "settings": {
-    "ruff.interpreter": [
-      "${workspaceFolder}/backend/aibox-image-lib/.venv/bin/python"
-    ]
+    "ruff.interpreter": ["${workspaceFolder}/backend/.venv/bin/python"]
   }
 }
