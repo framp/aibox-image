@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(rustdoc::missing_crate_level_docs)]
 
+use std::process;
+
 use anyhow::{Context, anyhow};
 use eframe::egui;
 
@@ -13,7 +15,7 @@ mod image_canvas;
 mod msg_panel;
 mod worker;
 
-use ai_tools::ToolsPanel;
+use ai_tools::{ToolsPanel, launcher};
 use history_panel::HistoryPanel;
 use image_canvas::ImageCanvas;
 use once_cell::sync::Lazy;
@@ -38,6 +40,17 @@ fn main() -> anyhow::Result<()> {
         RUNTIME.block_on(futures::future::pending::<()>());
     });
 
+    let launcher_handle = if cfg!(not(debug_assertions)) {
+        Some(RUNTIME.spawn(async move {
+            if let Err(e) = launcher::run().await {
+                eprintln!("Launcher failed: {e}");
+                process::exit(1);
+            }
+        }))
+    } else {
+        None
+    };
+
     let options: eframe::NativeOptions = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1200.0, 800.0])
@@ -46,7 +59,7 @@ fn main() -> anyhow::Result<()> {
         ..Default::default()
     };
 
-    eframe::run_native(
+    let gui_result = eframe::run_native(
         "AI Image Editor",
         options,
         Box::new(|cc| {
@@ -54,7 +67,13 @@ fn main() -> anyhow::Result<()> {
             Ok(Box::new(ImageEditorApp::new(&config)))
         }),
     )
-    .map_err(|e| anyhow::anyhow!("Failed to run eframe application: {:?}", e))
+    .map_err(|e| anyhow::anyhow!("Failed to run eframe application: {:?}", e));
+
+    if let Some(handle) = launcher_handle {
+        handle.abort();
+    }
+
+    gui_result
 }
 
 struct ImageEditorApp {
